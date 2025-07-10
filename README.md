@@ -1,6 +1,6 @@
-# Hatch Night Light Simulator
+# RiseLight
 
-A digital recreation of the Hatch night light functionality for iPad, built with Vue 3 and Nuxt 3.
+A color-changing light that helps kids know when it’s time to stay in bed –– and when it’s okay to rise.  Built with Vue 3 and Nuxt 3.
 
 ## Features
 

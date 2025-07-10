@@ -9,9 +9,9 @@ export default defineNuxtConfig({
   ],
   app: {
     head: {
-      title: 'Hatch Night Light Simulator',
+      title: 'RiseLight',
       meta: [
-        { name: 'description', content: 'A digital simulation of the Hatch night light for iPad' },
+        { name: 'description', content: 'A digital night light simulator for iPad' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' }
       ]
     }

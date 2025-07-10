@@ -33,9 +33,9 @@ import { useNightLight } from '../composables/useNightLight'
 
 // Page meta
 useHead({
-  title: 'Hatch Night Light Simulator',
+  title: 'RiseLight',
   meta: [
-    { name: 'description', content: 'A digital simulation of the Hatch night light for iPad' },
+    { name: 'description', content: 'A color-changing light that helps kids know when it’s time to stay in bed –– and when it’s okay to rise.' },
     { name: 'viewport', content: 'width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover' }
   ]
 })
