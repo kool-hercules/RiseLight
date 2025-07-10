@@ -26,6 +26,7 @@ export default defineNuxtConfig({
     payloadExtraction: false
   },
   nitro: {
+    preset: 'static',
     prerender: {
       routes: ['/']
     }
