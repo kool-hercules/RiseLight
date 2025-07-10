@@ -6,7 +6,7 @@
     @click="$emit('toggle-settings')"
   >
     <!-- Status overlay -->
-    <div class="absolute top-4 left-4 z-10">
+    <div class="status-overlay">
       <div class="bg-black/50 rounded-lg p-3 backdrop-blur-sm">
         <div class="flex items-center mb-2">
           <div :class="['status-indicator', statusIndicatorClass]"></div>
@@ -19,7 +19,7 @@
     </div>
 
     <!-- Time display -->
-    <div class="absolute top-4 right-4 z-10">
+    <div class="time-overlay">
       <div class="bg-black/50 rounded-lg p-3 backdrop-blur-sm">
         <div class="time-display text-right text-white/90">
           {{ currentTimeDisplay }}
@@ -44,10 +44,10 @@
     </div>
 
     <!-- Settings indicator -->
-    <div class="absolute bottom-4 left-4 z-10">
+    <div class="settings-button-container">
       <button
         @click.stop="$emit('toggle-settings')"
-        class="bg-black/50 hover:bg-black/70 rounded-full p-3 backdrop-blur-sm transition-colors"
+        class="settings-button"
       >
         <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />

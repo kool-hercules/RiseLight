@@ -70,4 +70,54 @@
   .status-pink {
     @apply bg-pink-500;
   }
+  
+  .settings-button-container {
+    @apply absolute z-10;
+    bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+    left: max(1rem, env(safe-area-inset-left, 1rem));
+  }
+  
+  .settings-button {
+    @apply bg-black/50 hover:bg-black/70 rounded-full p-3 backdrop-blur-sm transition-colors;
+    /* Ensure minimum touch target size for accessibility */
+    min-width: 48px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .status-overlay {
+    @apply absolute z-10;
+    top: max(1rem, env(safe-area-inset-top, 1rem));
+    left: max(1rem, env(safe-area-inset-left, 1rem));
+  }
+  
+  .time-overlay {
+    @apply absolute z-10;
+    top: max(1rem, env(safe-area-inset-top, 1rem));
+    right: max(1rem, env(safe-area-inset-right, 1rem));
+  }
+  
+  /* iPhone-specific optimizations */
+  @media (max-width: 480px) {
+    .settings-button {
+      @apply p-2;
+      min-width: 44px;
+      min-height: 44px;
+    }
+    
+    .settings-button svg {
+      @apply w-5 h-5;
+    }
+    
+    .status-overlay,
+    .time-overlay {
+      font-size: 0.875rem;
+    }
+    
+    .time-display {
+      @apply text-4xl;
+    }
+  }
 } 

@@ -36,7 +36,7 @@ useHead({
   title: 'Hatch Night Light Simulator',
   meta: [
     { name: 'description', content: 'A digital simulation of the Hatch night light for iPad' },
-    { name: 'viewport', content: 'width=device-width, initial-scale=1, user-scalable=no' }
+    { name: 'viewport', content: 'width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover' }
   ]
 })
 
