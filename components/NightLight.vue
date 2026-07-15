@@ -1,7 +1,6 @@
 <template>
   <div
     class="night-light"
-    :class="lightClasses"
     :style="lightStyles"
     @click="$emit('toggle-settings')"
   >
@@ -9,7 +8,7 @@
     <div class="status-overlay">
       <div class="bg-black/50 rounded-lg p-3 backdrop-blur-sm">
         <div class="flex items-center mb-2">
-          <div :class="['status-indicator', statusIndicatorClass]"></div>
+          <div class="status-indicator" :style="{ backgroundColor: currentColor }"></div>
           <span class="text-sm font-medium">{{ statusMessage }}</span>
         </div>
         <div v-if="isActive" class="text-xs text-gray-300">
@@ -79,20 +78,9 @@ defineEmits<{
 }>()
 
 // Computed properties
-const lightClasses = computed(() => ({
-  'night-light-white': props.currentColor === 'white',
-  'night-light-blue': props.currentColor === 'blue',
-  'night-light-pink': props.currentColor === 'pink'
-}))
-
 const lightStyles = computed(() => ({
+  '--light-color': props.currentColor,
   '--light-opacity': props.brightness.toString()
-}))
-
-const statusIndicatorClass = computed(() => ({
-  'status-white': props.currentColor === 'white',
-  'status-blue': props.currentColor === 'blue',
-  'status-pink': props.currentColor === 'pink'
 }))
 
 const currentTimeDisplay = computed(() => {

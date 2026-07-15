@@ -18,7 +18,8 @@
       @update-wake-time="handleUpdateWakeTime"
       @update-wake-duration="handleUpdateWakeDuration"
       @update-brightness="handleUpdateBrightness"
-      @preview-color="handlePreviewColor"
+      @update-color="handleUpdateColor"
+      @preview-mode="handlePreviewMode"
       @stop-preview="handleStopPreview"
       @reset-settings="handleResetSettings"
     />
@@ -27,7 +28,7 @@
 
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount } from 'vue'
-import type { LightColor } from '../types'
+import type { LightMode, Settings } from '../types'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 
@@ -42,19 +43,20 @@ useHead({
 
 // Import composables
 const settingsComposable = useSettings()
-const nightLightComposable = useNightLight()
 
 // Extract reactive refs from composables
 const {
   settings,
   isSettingsOpen,
-  loadSettings,
   toggleSettings,
   updateWakeTime,
   updateWakeDuration,
   updateBrightness,
+  updateColor,
   resetSettings
 } = settingsComposable
+
+const nightLightComposable = useNightLight(settings)
 
 const {
   currentTime,
@@ -72,7 +74,7 @@ const {
 
 // Event handlers
 const handleToggleNightLight = () => {
-  toggleNightLight(settings.value.wakeTime)
+  toggleNightLight()
 }
 
 const handleUpdateWakeTime = (time: string) => {
@@ -83,12 +85,16 @@ const handleUpdateWakeDuration = (duration: number) => {
   updateWakeDuration(duration)
 }
 
-const handleUpdateBrightness = (color: keyof typeof settings.value.brightness, value: number) => {
-  updateBrightness(color, value)
+const handleUpdateBrightness = (state: keyof Settings['brightness'], value: number) => {
+  updateBrightness(state, value)
 }
 
-const handlePreviewColor = (color: LightColor) => {
-  startPreview(color)
+const handleUpdateColor = (state: keyof Settings['colors'], color: string) => {
+  updateColor(state, color)
+}
+
+const handlePreviewMode = (mode: LightMode) => {
+  startPreview(mode)
 }
 
 const handleStopPreview = () => {
@@ -127,9 +133,6 @@ const handleContextMenu = (event: Event) => {
 
 // Lifecycle
 onMounted(() => {
-  // Load settings from localStorage
-  loadSettings()
-  
   // Add event listeners
   document.addEventListener('keydown', handleKeyDown)
   document.addEventListener('contextmenu', handleContextMenu)
@@ -146,4 +149,4 @@ onBeforeUnmount(() => {
 .app-container {
   @apply w-full h-full relative overflow-hidden;
 }
-</style> 
+</style>

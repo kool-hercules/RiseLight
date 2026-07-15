@@ -1,162 +1,204 @@
-import { ref, computed, onMounted, onUnmounted, readonly } from 'vue'
-import type { LightState, LightColor, TimerInfo } from '../types'
-import { useSettings } from './useSettings'
+import {
+  computed,
+  onMounted,
+  onUnmounted,
+  readonly,
+  ref,
+  watch,
+  type Ref
+} from 'vue'
+import type { LightColor, LightMode, LightState, Settings, TimerInfo } from '../types'
+import { calculateNextWakeTime, calculateScheduleState } from '../utils/schedule'
+import { clearActiveSession, readActiveSession, saveActiveSession } from '../utils/session'
+import { getBrowserStorage, type StorageLike } from '../utils/settings'
 
-export const useNightLight = () => {
-  const currentTime = ref(new Date())
+type IntervalHandle = unknown
+
+export type NightLightDependencies = {
+  now?: () => Date
+  setInterval?: (callback: () => void, milliseconds: number) => IntervalHandle
+  clearInterval?: (handle: IntervalHandle) => void
+  storage?: StorageLike | null
+}
+
+export const createNightLightRuntime = (
+  settings: Readonly<Ref<Settings>>,
+  dependencies: NightLightDependencies = {}
+) => {
+  const now = dependencies.now ?? (() => new Date())
+  const setClockInterval = dependencies.setInterval
+    ?? ((callback, milliseconds) => globalThis.setInterval(callback, milliseconds))
+  const clearClockInterval = dependencies.clearInterval
+    ?? (handle => globalThis.clearInterval(handle as ReturnType<typeof globalThis.setInterval>))
+  const storage = dependencies.storage === undefined ? getBrowserStorage() : dependencies.storage
+
+  const currentTime = ref(new Date(now().getTime()))
   const isActive = ref(false)
   const currentState = ref<LightState>('inactive')
-  const currentColor = ref<LightColor>('white')
   const timeRemaining = ref(0)
-  const nextWakeTime = ref(new Date())
-  const isPreviewMode = ref(false)
-  const previewColor = ref<LightColor>('white')
+  const nextWakeTime = ref<Date | null>(null)
+  const previewMode = ref<LightMode | null>(null)
+  let clockInterval: IntervalHandle | null = null
 
-  // Timer for updating current time
-  let timerInterval: NodeJS.Timeout | null = null
+  const updateLightState = (at: Date = now()): void => {
+    currentTime.value = new Date(at.getTime())
 
-  const startTimer = () => {
-    timerInterval = setInterval(() => {
-      currentTime.value = new Date()
-      if (isActive.value && !isPreviewMode.value) {
-        updateLightState()
-      }
-    }, 1000)
-  }
-
-  const stopTimer = () => {
-    if (timerInterval) {
-      clearInterval(timerInterval)
-      timerInterval = null
-    }
-  }
-
-  // Calculate next wake time based on current time and settings
-  const calculateNextWakeTime = (wakeTimeStr: string): Date => {
-    const now = new Date()
-    const [hours, minutes] = wakeTimeStr.split(':').map(Number)
-    
-    const wakeTime = new Date(now)
-    wakeTime.setHours(hours, minutes, 0, 0)
-    
-    // If wake time is in the past today, set it for tomorrow
-    if (wakeTime <= now) {
-      wakeTime.setDate(wakeTime.getDate() + 1)
-    }
-    
-    return wakeTime
-  }
-
-  // Update light state based on current time and settings
-  const updateLightState = () => {
-    const { settings } = useSettings()
-    const now = currentTime.value
-    const wakeTime = nextWakeTime.value
-    const wakeEndTime = new Date(wakeTime.getTime() + settings.value.wakeDuration * 60 * 1000)
-    
-    if (now < wakeTime) {
-      // Night mode - white light
-      currentState.value = 'night'
-      currentColor.value = 'white'
-      timeRemaining.value = wakeTime.getTime() - now.getTime()
-    } else if (now >= wakeTime && now < wakeEndTime) {
-      // Wake mode - blue light
-      currentState.value = 'wake'
-      currentColor.value = 'blue'
-      timeRemaining.value = wakeEndTime.getTime() - now.getTime()
-    } else {
-      // Awake mode - pink light
-      currentState.value = 'awake'
-      currentColor.value = 'pink'
+    if (!isActive.value || !nextWakeTime.value) {
+      currentState.value = 'inactive'
       timeRemaining.value = 0
+      return
     }
+
+    const schedule = calculateScheduleState(at, nextWakeTime.value, settings.value.wakeDuration)
+    currentState.value = schedule.mode
+    timeRemaining.value = schedule.timeRemaining
   }
 
-  // Start the night light
-  const startNightLight = (wakeTimeStr: string) => {
+  const refresh = (): void => {
+    updateLightState(now())
+  }
+
+  const startClock = (): void => {
+    refresh()
+    if (clockInterval !== null) {
+      return
+    }
+
+    clockInterval = setClockInterval(refresh, 1000)
+  }
+
+  const stopClock = (): void => {
+    if (clockInterval === null) {
+      return
+    }
+
+    clearClockInterval(clockInterval)
+    clockInterval = null
+  }
+
+  const startNightLight = (): void => {
+    const startedAt = now()
+    currentTime.value = new Date(startedAt.getTime())
+    nextWakeTime.value = calculateNextWakeTime(startedAt, settings.value.wakeTime)
     isActive.value = true
-    nextWakeTime.value = calculateNextWakeTime(wakeTimeStr)
-    updateLightState()
-    startTimer()
+    updateLightState(startedAt)
+    saveActiveSession(storage, nextWakeTime.value)
+    startClock()
   }
 
-  // Stop the night light
-  const stopNightLight = () => {
+  const stopNightLight = (): void => {
     isActive.value = false
     currentState.value = 'inactive'
-    currentColor.value = 'white'
+    nextWakeTime.value = null
     timeRemaining.value = 0
-    stopTimer()
+    clearActiveSession(storage)
   }
 
-  // Toggle the night light
-  const toggleNightLight = (wakeTimeStr: string) => {
+  const toggleNightLight = (): void => {
     if (isActive.value) {
       stopNightLight()
     } else {
-      startNightLight(wakeTimeStr)
+      startNightLight()
     }
   }
 
-  // Preview mode for testing colors
-  const startPreview = (color: LightColor) => {
-    isPreviewMode.value = true
-    previewColor.value = color
-    currentColor.value = color
-    currentState.value = 'night' // Use night state for preview
+  const startPreview = (mode: LightMode): void => {
+    previewMode.value = mode
   }
 
-  const stopPreview = () => {
-    isPreviewMode.value = false
-    if (isActive.value) {
-      updateLightState()
-    } else {
-      currentColor.value = 'white'
+  const stopPreview = (): void => {
+    previewMode.value = null
+  }
+
+  const restoreSession = (): boolean => {
+    const restoredAt = now()
+    const restoredWakeTime = readActiveSession(storage, restoredAt)
+    currentTime.value = new Date(restoredAt.getTime())
+
+    if (!restoredWakeTime) {
+      isActive.value = false
       currentState.value = 'inactive'
+      nextWakeTime.value = null
+      timeRemaining.value = 0
+      return false
     }
+
+    nextWakeTime.value = restoredWakeTime
+    isActive.value = true
+    updateLightState(restoredAt)
+    return true
   }
 
-  // Format time remaining as human-readable string
+  const stopSettingsWatcher = watch(
+    () => [settings.value.wakeTime, settings.value.wakeDuration] as const,
+    ([wakeTime], [previousWakeTime]) => {
+      if (!isActive.value) {
+        return
+      }
+
+      const changedAt = now()
+      if (wakeTime !== previousWakeTime || !nextWakeTime.value) {
+        nextWakeTime.value = calculateNextWakeTime(changedAt, wakeTime)
+        saveActiveSession(storage, nextWakeTime.value)
+      }
+
+      updateLightState(changedAt)
+    },
+    { flush: 'sync' }
+  )
+
+  const displayMode = computed<LightMode | null>(() => {
+    if (previewMode.value) {
+      return previewMode.value
+    }
+
+    return currentState.value === 'inactive' ? null : currentState.value
+  })
+
+  const currentColor = computed<LightColor>(() => {
+    return displayMode.value ? settings.value.colors[displayMode.value] : '#ffffff'
+  })
+
+  const getCurrentBrightness = computed(() => {
+    return displayMode.value ? settings.value.brightness[displayMode.value] / 100 : 0
+  })
+
+  const isPreviewMode = computed(() => previewMode.value !== null)
+
   const formatTimeRemaining = computed(() => {
-    if (timeRemaining.value <= 0) return '00:00:00'
-    
+    if (timeRemaining.value <= 0) {
+      return '00:00:00'
+    }
+
     const totalSeconds = Math.floor(timeRemaining.value / 1000)
     const hours = Math.floor(totalSeconds / 3600)
     const minutes = Math.floor((totalSeconds % 3600) / 60)
     const seconds = totalSeconds % 60
-    
+
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   })
 
-  // Get current brightness based on color
-  const getCurrentBrightness = computed(() => {
-    const { settings } = useSettings()
-    return settings.value.brightness[currentColor.value] / 100
-  })
-
-  // Format next wake time
   const formatNextWakeTime = computed(() => {
-    if (!isActive.value) return ''
-    
-    const options: Intl.DateTimeFormatOptions = {
+    if (!isActive.value || !nextWakeTime.value) {
+      return ''
+    }
+
+    return nextWakeTime.value.toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
-    }
-    
-    return nextWakeTime.value.toLocaleTimeString([], options)
+    })
   })
 
-  // Get status message
   const statusMessage = computed(() => {
-    if (isPreviewMode.value) {
-      return `Preview: ${previewColor.value} light`
+    if (previewMode.value) {
+      return `Previewing ${previewMode.value} mode`
     }
-    
+
     if (!isActive.value) {
       return 'Night light is off'
     }
-    
+
     switch (currentState.value) {
       case 'night':
         return `Night mode until ${formatNextWakeTime.value}`
@@ -169,7 +211,6 @@ export const useNightLight = () => {
     }
   })
 
-  // Timer info object
   const timerInfo = computed<TimerInfo>(() => ({
     currentTime: currentTime.value,
     nextWakeTime: nextWakeTime.value,
@@ -179,39 +220,58 @@ export const useNightLight = () => {
     isActive: isActive.value
   }))
 
-  // Initialize timer on mount
-  onMounted(() => {
-    currentTime.value = new Date()
-  })
-
-  // Cleanup on unmount
-  onUnmounted(() => {
-    stopTimer()
-  })
+  const dispose = (): void => {
+    stopClock()
+    stopSettingsWatcher()
+  }
 
   return {
-    // State
     currentTime: readonly(currentTime),
     isActive: readonly(isActive),
     currentState: readonly(currentState),
-    currentColor: readonly(currentColor),
+    currentColor,
     timeRemaining: readonly(timeRemaining),
     nextWakeTime: readonly(nextWakeTime),
-    isPreviewMode: readonly(isPreviewMode),
+    previewMode: readonly(previewMode),
+    isPreviewMode,
     timerInfo,
-    
-    // Computed
     formatTimeRemaining,
     getCurrentBrightness,
     formatNextWakeTime,
     statusMessage,
-    
-    // Methods
+    startClock,
+    stopClock,
+    refresh,
     startNightLight,
     stopNightLight,
     toggleNightLight,
     startPreview,
     stopPreview,
-    updateLightState
+    restoreSession,
+    updateLightState,
+    dispose
   }
-} 
+}
+
+export const useNightLight = (settings: Readonly<Ref<Settings>>) => {
+  const runtime = createNightLightRuntime(settings)
+
+  const handleVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible') {
+      runtime.refresh()
+    }
+  }
+
+  onMounted(() => {
+    runtime.restoreSession()
+    runtime.startClock()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+  })
+
+  onUnmounted(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+    runtime.dispose()
+  })
+
+  return runtime
+}

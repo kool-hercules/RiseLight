@@ -1,3 +1,56 @@
+<script setup lang="ts">
+import type { LightMode, Settings } from '../types'
+
+interface Props {
+  isOpen: boolean
+  settings: Settings
+}
+
+defineProps<Props>()
+
+// Event handlers
+const emit = defineEmits<{
+  'close': []
+  'update-wake-time': [time: string]
+  'update-wake-duration': [duration: number]
+  'update-brightness': [state: keyof Settings['brightness'], value: number]
+  'update-color': [state: keyof Settings['colors'], color: string]
+  'preview-mode': [mode: LightMode]
+  'stop-preview': []
+  'reset-settings': []
+}>()
+
+const updateWakeTime = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  if (target.value) {
+    emit('update-wake-time', target.value)
+  }
+}
+
+const updateWakeDuration = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const duration = parseInt(target.value)
+  if (!isNaN(duration)) {
+    emit('update-wake-duration', duration)
+  }
+}
+
+const updateBrightness = (state: keyof Settings['brightness'], event: Event) => {
+  const target = event.target as HTMLInputElement
+  const value = parseInt(target.value)
+  if (!isNaN(value)) {
+    emit('update-brightness', state, value)
+  }
+}
+
+const updateColor = (state: keyof Settings['colors'], event: Event) => {
+  const target = event.target as HTMLInputElement
+  if (target.value) {
+    emit('update-color', state, target.value)
+  }
+}
+</script>
+
 <template>
   <div
     v-if="isOpen"
@@ -51,85 +104,115 @@
         </div>
       </div>
 
-      <!-- Brightness Controls -->
+      <!-- Colors and Brightness -->
       <div class="mb-6">
-        <h3 class="text-sm font-medium mb-3">Brightness</h3>
+        <h3 class="text-sm font-medium mb-3">Colors & Brightness</h3>
         
-        <!-- White Light Brightness -->
-        <div class="mb-4">
-          <label class="block text-sm text-gray-300 mb-2">
-            White Light: {{ settings.brightness.white }}%
-          </label>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            :value="settings.brightness.white"
-            @input="updateBrightness('white', $event)"
-            class="slider w-full"
+        <!-- Night Mode -->
+        <div class="mb-4 p-4 bg-gray-800/50 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-sm font-medium text-gray-200">Night Mode</label>
+            <input
+              type="color"
+              :value="settings.colors.night"
+              @input="updateColor('night', $event)"
+              class="bg-transparent border-0 w-8 h-8 cursor-pointer"
+            >
+          </div>
+          <div class="mb-2">
+            <label class="block text-xs text-gray-400 mb-1">
+              Brightness: {{ settings.brightness.night }}%
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              :value="settings.brightness.night"
+              @input="updateBrightness('night', $event)"
+              class="slider w-full"
+            >
+          </div>
+          <button
+            @click="$emit('preview-mode', 'night')"
+            class="text-xs text-blue-400 hover:text-blue-300 transition-colors"
           >
+            Preview
+          </button>
         </div>
 
-        <!-- Blue Light Brightness -->
-        <div class="mb-4">
-          <label class="block text-sm text-gray-300 mb-2">
-            Blue Light: {{ settings.brightness.blue }}%
-          </label>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            :value="settings.brightness.blue"
-            @input="updateBrightness('blue', $event)"
-            class="slider w-full"
+        <!-- Wake Mode -->
+        <div class="mb-4 p-4 bg-gray-800/50 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-sm font-medium text-gray-200">Wake Mode</label>
+            <input
+              type="color"
+              :value="settings.colors.wake"
+              @input="updateColor('wake', $event)"
+              class="bg-transparent border-0 w-8 h-8 cursor-pointer"
+            >
+          </div>
+          <div class="mb-2">
+            <label class="block text-xs text-gray-400 mb-1">
+              Brightness: {{ settings.brightness.wake }}%
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              :value="settings.brightness.wake"
+              @input="updateBrightness('wake', $event)"
+              class="slider w-full"
+            >
+          </div>
+          <button
+            @click="$emit('preview-mode', 'wake')"
+            class="text-xs text-blue-400 hover:text-blue-300 transition-colors"
           >
+            Preview
+          </button>
         </div>
 
-        <!-- Pink Light Brightness -->
-        <div class="mb-4">
-          <label class="block text-sm text-gray-300 mb-2">
-            Pink Light: {{ settings.brightness.pink }}%
-          </label>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="5"
-            :value="settings.brightness.pink"
-            @input="updateBrightness('pink', $event)"
-            class="slider w-full"
+        <!-- Awake Mode -->
+        <div class="mb-4 p-4 bg-gray-800/50 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-sm font-medium text-gray-200">Awake Mode</label>
+            <input
+              type="color"
+              :value="settings.colors.awake"
+              @input="updateColor('awake', $event)"
+              class="bg-transparent border-0 w-8 h-8 cursor-pointer"
+            >
+          </div>
+          <div class="mb-2">
+            <label class="block text-xs text-gray-400 mb-1">
+              Brightness: {{ settings.brightness.awake }}%
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              :value="settings.brightness.awake"
+              @input="updateBrightness('awake', $event)"
+              class="slider w-full"
+            >
+          </div>
+          <button
+            @click="$emit('preview-mode', 'awake')"
+            class="text-xs text-blue-400 hover:text-blue-300 transition-colors"
           >
+            Preview
+          </button>
         </div>
       </div>
 
-      <!-- Preview Buttons -->
+      <!-- Preview Control -->
       <div class="mb-6">
-        <h3 class="text-sm font-medium mb-3">Preview Colors</h3>
-        <div class="flex gap-2">
-          <button
-            @click="$emit('preview-color', 'white')"
-            class="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-colors"
-          >
-            White
-          </button>
-          <button
-            @click="$emit('preview-color', 'blue')"
-            class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded-lg transition-colors"
-          >
-            Blue
-          </button>
-          <button
-            @click="$emit('preview-color', 'pink')"
-            class="flex-1 bg-pink-600 hover:bg-pink-500 text-white py-2 px-4 rounded-lg transition-colors"
-          >
-            Pink
-          </button>
-        </div>
         <button
           @click="$emit('stop-preview')"
-          class="w-full mt-2 bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded-lg transition-colors"
+          class="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-colors"
         >
           Stop Preview
         </button>
@@ -153,51 +236,6 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import type { Settings, LightColor } from '../types'
-
-interface Props {
-  isOpen: boolean
-  settings: Settings
-}
-
-defineProps<Props>()
-
-// Event handlers
-const emit = defineEmits<{
-  'close': []
-  'update-wake-time': [time: string]
-  'update-wake-duration': [duration: number]
-  'update-brightness': [color: keyof Settings['brightness'], value: number]
-  'preview-color': [color: LightColor]
-  'stop-preview': []
-  'reset-settings': []
-}>()
-
-const updateWakeTime = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  if (target.value) {
-    emit('update-wake-time', target.value)
-  }
-}
-
-const updateWakeDuration = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const duration = parseInt(target.value)
-  if (!isNaN(duration)) {
-    emit('update-wake-duration', duration)
-  }
-}
-
-const updateBrightness = (color: keyof Settings['brightness'], event: Event) => {
-  const target = event.target as HTMLInputElement
-  const value = parseInt(target.value)
-  if (!isNaN(value)) {
-    emit('update-brightness', color, value)
-  }
-}
-</script>
 
 <style scoped>
 /* Custom scrollbar for settings panel */
@@ -224,4 +262,4 @@ input[type="time"],
 input[type="range"] {
   touch-action: manipulation;
 }
-</style> 
+</style>
