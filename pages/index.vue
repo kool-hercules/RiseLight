@@ -42,6 +42,7 @@ import { onMounted, onBeforeUnmount } from 'vue'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'
+import { useWakeLock } from '../composables/useWakeLock'
 
 // Page meta
 useHead({
@@ -79,6 +80,10 @@ const {
 } = useNightLight(settings)
 
 const { showOnboarding, completeOnboarding, restartOnboarding } = useOnboarding()
+
+// Keep the screen awake while the light is on — a night light that sleeps is
+// useless.
+useWakeLock(isActive)
 
 // Closing settings always ends any active preview so the light never gets
 // stuck overriding the real schedule after the panel is dismissed.
