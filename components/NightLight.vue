@@ -3,18 +3,8 @@
     <!-- Glow layer: opacity-controlled, sits behind and never blocks taps -->
     <div class="light-layer" :style="lightStyles"></div>
 
-    <!-- Status overlay -->
-    <div class="status-overlay" :style="chromeStyle">
-      <div class="bg-black/50 rounded-lg p-3 backdrop-blur-sm">
-        <div class="flex items-center mb-2">
-          <div class="status-indicator" :style="{ backgroundColor: currentColor }"></div>
-          <span class="text-sm font-medium">{{ statusMessage }}</span>
-        </div>
-        <div v-if="isActive" class="text-xs text-gray-300">
-          {{ formatTimeRemaining }}
-        </div>
-      </div>
-    </div>
+    <!-- Screen-reader announcement of the current meaning -->
+    <p class="sr-only" aria-live="polite">{{ headline }}. {{ detail }}</p>
 
     <!-- Time display -->
     <div class="time-overlay" :style="chromeStyle">
@@ -25,19 +15,20 @@
       </div>
     </div>
 
-    <!-- Center controls -->
-    <div class="absolute inset-0 flex items-center justify-center z-10">
+    <!-- Center: teaches the current state at a glance, then the control -->
+    <div class="absolute inset-0 flex items-center justify-center z-10 px-6">
       <div class="text-center">
+        <div :style="chromeStyle">
+          <ModeIcon :name="displayIcon" class="w-14 h-14 mx-auto mb-4 text-white/90" />
+          <div class="text-3xl font-semibold mb-1">{{ headline }}</div>
+          <div class="text-sm text-white/70 mb-8 min-h-[1.25rem]">{{ detail }}</div>
+        </div>
         <button
           @click.stop="$emit('toggle-nightlight')"
-          class="control-button text-xl mb-4 min-w-[120px]"
+          class="control-button text-xl min-w-[140px]"
         >
           {{ isActive ? 'Turn Off' : 'Turn On' }}
         </button>
-
-        <div v-if="!isActive" class="text-white/70 text-sm">
-          Tap “Turn On” to start
-        </div>
       </div>
     </div>
 
@@ -59,14 +50,17 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { LightColor } from '../types'
+import type { LightColor, LightState } from '../types'
+import { stateHeadline, stateIcon } from '../utils/modes'
+import ModeIcon from './ModeIcon.vue'
 
 interface Props {
   currentColor: LightColor
   brightness: number
   isActive: boolean
-  statusMessage: string
+  currentState: LightState
   formatTimeRemaining: string
+  formatOkayToRise: string
   currentTime: Date
 }
 
@@ -78,9 +72,9 @@ defineEmits<{
 }>()
 
 // Idle handling: once the light is on and the user has been still for a while,
-// fade the status/clock chrome so the device sits quietly in a dark room. Any
-// interaction brings it back. The chrome never fully disappears and the
-// controls are never dimmed, so nothing becomes unreachable.
+// fade the teaching text and clock so the device sits quietly in a dark room.
+// Any interaction brings it back. The Turn Off / gear controls are never
+// dimmed, so nothing ever becomes unreachable.
 const IDLE_MS = 8000
 const idle = ref(false)
 let idleTimer: ReturnType<typeof setTimeout> | null = null
@@ -99,6 +93,29 @@ const chromeStyle = computed(() => ({
   opacity: props.isActive && idle.value ? '0.2' : '1',
   transition: 'opacity 0.8s ease'
 }))
+
+const displayIcon = computed(() => (props.isActive ? stateIcon(props.currentState) : 'power'))
+
+const headline = computed(() => (props.isActive ? stateHeadline(props.currentState) : 'Sleep light'))
+
+const detail = computed(() => {
+  if (!props.isActive) {
+    return 'Tap Turn On to start tonight’s light.'
+  }
+
+  switch (props.currentState) {
+    case 'night':
+      return props.formatOkayToRise
+        ? `Okay to get up at ${props.formatOkayToRise}`
+        : 'Rest until morning.'
+    case 'wake':
+      return `Okay to get up in ${props.formatTimeRemaining}`
+    case 'awake':
+      return 'Good morning!'
+    default:
+      return ''
+  }
+})
 
 const lightStyles = computed(() => ({
   '--light-color': props.currentColor,
@@ -134,13 +151,13 @@ onBeforeUnmount(() => {
 <style scoped>
 @media (orientation: landscape) {
   .time-display {
-    @apply text-4xl;
+    @apply text-3xl;
   }
 }
 
 @media (orientation: portrait) {
   .time-display {
-    @apply text-6xl;
+    @apply text-5xl;
   }
 }
 </style>

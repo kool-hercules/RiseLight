@@ -4,8 +4,9 @@
       :current-color="currentColor"
       :brightness="getCurrentBrightness"
       :is-active="isActive"
-      :status-message="statusMessage"
+      :current-state="currentState"
       :format-time-remaining="formatTimeRemaining"
+      :format-okay-to-rise="formatOkayToRiseTime"
       :current-time="currentTime"
       @toggle-nightlight="toggleNightLight"
       @toggle-settings="toggleSettings"
@@ -24,6 +25,14 @@
       @preview-mode="startPreview"
       @stop-preview="stopPreview"
       @reset-settings="resetSettings"
+      @restart-intro="handleRestartIntro"
+    />
+
+    <OnboardingOverlay
+      v-if="showOnboarding"
+      :settings="settings"
+      @update-wake-time="updateWakeTime"
+      @complete="completeOnboarding"
     />
   </div>
 </template>
@@ -32,6 +41,7 @@
 import { onMounted, onBeforeUnmount } from 'vue'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
+import { useOnboarding } from '../composables/useOnboarding'
 
 // Page meta
 useHead({
@@ -58,14 +68,17 @@ const {
   currentTime,
   isActive,
   currentColor,
+  currentState,
   previewMode,
   formatTimeRemaining,
+  formatOkayToRiseTime,
   getCurrentBrightness,
-  statusMessage,
   toggleNightLight,
   startPreview,
   stopPreview
 } = useNightLight(settings)
+
+const { showOnboarding, completeOnboarding, restartOnboarding } = useOnboarding()
 
 // Closing settings always ends any active preview so the light never gets
 // stuck overriding the real schedule after the panel is dismissed.
@@ -76,8 +89,19 @@ const closeSettings = () => {
   }
 }
 
+const handleRestartIntro = () => {
+  restartOnboarding()
+  if (isSettingsOpen.value) {
+    toggleSettings()
+  }
+}
+
 // Keyboard shortcuts
 const handleKeyDown = (event: KeyboardEvent) => {
+  if (showOnboarding.value) {
+    return
+  }
+
   switch (event.key) {
     case ' ':
       if (!isSettingsOpen.value) {

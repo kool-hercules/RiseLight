@@ -8,6 +8,7 @@ import {
   type Ref
 } from 'vue'
 import type { LightColor, LightMode, LightState, Settings, TimerInfo } from '../types'
+import { MODE_PRESENTATION } from '../utils/modes'
 import { calculateNextWakeTime, calculateScheduleState } from '../utils/schedule'
 import { clearActiveSession, readActiveSession, saveActiveSession } from '../utils/session'
 import { getBrowserStorage, type StorageLike } from '../utils/settings'
@@ -199,24 +200,39 @@ export const createNightLightRuntime = (
     })
   })
 
+  // The moment the light reaches the "okay to get up" state: the end of the
+  // wake-up window (wake start + duration).
+  const formatOkayToRiseTime = computed(() => {
+    if (!isActive.value || !nextWakeTime.value) {
+      return ''
+    }
+
+    const okayAt = new Date(nextWakeTime.value.getTime() + settings.value.wakeDuration * 60 * 1000)
+    return okayAt.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })
+  })
+
   const statusMessage = computed(() => {
     if (previewMode.value) {
-      return `Previewing ${previewMode.value} mode`
+      return `Previewing “${MODE_PRESENTATION[previewMode.value].label}”`
     }
 
     if (!isActive.value) {
-      return 'Night light is off'
+      return 'Light is off'
     }
 
     switch (currentState.value) {
       case 'night':
-        return `Night mode until ${formatNextWakeTime.value}`
+        return `Stay in bed — okay to get up at ${formatOkayToRiseTime.value}`
       case 'wake':
-        return `Wake mode - ${formatTimeRemaining.value} remaining`
+        return `Almost time — okay to get up in ${formatTimeRemaining.value}`
       case 'awake':
-        return 'Awake mode - ready to start your day!'
+        return 'Okay to get up — good morning!'
       default:
-        return 'Night light is off'
+        return 'Light is off'
     }
   })
 
@@ -247,6 +263,7 @@ export const createNightLightRuntime = (
     formatTimeRemaining,
     getCurrentBrightness,
     formatNextWakeTime,
+    formatOkayToRiseTime,
     statusMessage,
     startClock,
     stopClock,

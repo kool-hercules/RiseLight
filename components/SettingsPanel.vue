@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { LightMode, Settings } from '../types'
+import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
+import ModeIcon from './ModeIcon.vue'
 
 interface Props {
   isOpen: boolean
@@ -20,13 +22,10 @@ const emit = defineEmits<{
   'preview-mode': [mode: LightMode]
   'stop-preview': []
   'reset-settings': []
+  'restart-intro': []
 }>()
 
-const modes: { key: LightMode; label: string; help: string }[] = [
-  { key: 'night', label: 'Night', help: 'Shown at bedtime until wake time — the “stay in bed” color.' },
-  { key: 'wake', label: 'Wake', help: 'Shown during the wake window as morning approaches.' },
-  { key: 'awake', label: 'Awake', help: 'Shown once it’s okay to get up.' }
-]
+const modes = MODE_ORDER.map(key => ({ key, ...MODE_PRESENTATION[key] }))
 
 // Confirmation gate so the destructive reset can't be triggered with one stray
 // tap next to "Done". Reset the gate whenever the panel's view changes.
@@ -38,7 +37,9 @@ watch(
   }
 )
 
-const previewLabel = computed(() => modes.find(mode => mode.key === props.previewMode)?.label ?? '')
+const previewLabel = computed(() =>
+  props.previewMode ? MODE_PRESENTATION[props.previewMode].label : ''
+)
 const previewBrightness = computed(() =>
   props.previewMode ? props.settings.brightness[props.previewMode] : 0
 )
@@ -104,7 +105,7 @@ const confirmReset = () => {
     >
       <div class="settings-panel w-full max-w-md pointer-events-auto">
         <div class="flex items-center justify-between mb-3">
-          <span class="text-sm font-medium">Previewing {{ previewLabel }} mode</span>
+          <span class="text-sm font-medium">Previewing “{{ previewLabel }}”</span>
           <input
             type="color"
             :value="previewColor"
@@ -154,7 +155,7 @@ const confirmReset = () => {
         @click.stop
       >
         <div class="flex items-center justify-between mb-6">
-          <h2 class="text-xl font-semibold">Night Light Settings</h2>
+          <h2 class="text-xl font-semibold">Settings</h2>
           <button
             @click="$emit('close')"
             class="text-gray-400 hover:text-white transition-colors"
@@ -165,11 +166,6 @@ const confirmReset = () => {
             </svg>
           </button>
         </div>
-
-        <p class="text-xs text-gray-400 mb-6 leading-relaxed">
-          The light shows a calm color while it’s time to stay in bed, shifts through a
-          wake window as morning nears, then turns to the “okay to get up” color.
-        </p>
 
         <div
           v-if="saveFailed"
@@ -182,20 +178,20 @@ const confirmReset = () => {
 
         <!-- Wake Time Setting -->
         <div class="mb-6">
-          <label class="block text-sm font-medium mb-2">Wake Time</label>
+          <label class="block text-sm font-medium mb-2">Wake-up time</label>
           <input
             type="time"
             :value="settings.wakeTime"
             @input="updateWakeTime"
             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-          <p class="text-xs text-gray-500 mt-1">When the wake window begins each morning.</p>
+          <p class="text-xs text-gray-500 mt-1">When the morning wake-up window begins.</p>
         </div>
 
         <!-- Wake Duration Setting -->
         <div class="mb-6">
           <label class="block text-sm font-medium mb-2">
-            Wake Duration: {{ settings.wakeDuration }} minutes
+            Wake-up window: {{ settings.wakeDuration }} minutes
           </label>
           <input
             type="range"
@@ -211,13 +207,14 @@ const confirmReset = () => {
             <span>60 min</span>
           </div>
           <p class="text-xs text-gray-500 mt-1">
-            How long the wake color shows before switching to “okay to get up”.
+            How long the “almost time” color shows before it becomes “okay to get up”.
           </p>
         </div>
 
         <!-- Colors and Brightness -->
         <div class="mb-6">
-          <h3 class="text-sm font-medium mb-3">Colors &amp; Brightness</h3>
+          <h3 class="text-sm font-medium mb-1">Colors &amp; brightness</h3>
+          <p class="text-xs text-gray-500 mb-3">Tap Preview to see any color fill the screen.</p>
 
           <div
             v-for="mode in modes"
@@ -225,7 +222,10 @@ const confirmReset = () => {
             class="mb-4 p-4 bg-gray-800/50 rounded-lg"
           >
             <div class="flex items-center justify-between mb-1">
-              <label class="text-sm font-medium text-gray-200">{{ mode.label }} Mode</label>
+              <span class="flex items-center gap-2 text-sm font-medium text-gray-200">
+                <ModeIcon :name="mode.icon" class="w-5 h-5 text-gray-300" />
+                {{ mode.label }}
+              </span>
               <input
                 type="color"
                 :value="settings.colors[mode.key]"
@@ -234,7 +234,7 @@ const confirmReset = () => {
                 :aria-label="`${mode.label} color`"
               >
             </div>
-            <p class="text-xs text-gray-500 mb-2">{{ mode.help }}</p>
+            <p class="text-xs text-gray-500 mb-2">{{ mode.settingHelp }}</p>
             <div class="mb-3">
               <label class="block text-xs text-gray-400 mb-1">
                 Brightness: {{ settings.brightness[mode.key] }}%
@@ -253,10 +253,18 @@ const confirmReset = () => {
               @click="$emit('preview-mode', mode.key)"
               class="preview-button"
             >
-              Preview {{ mode.label }}
+              Preview
             </button>
           </div>
         </div>
+
+        <!-- Replay intro -->
+        <button
+          @click="$emit('restart-intro')"
+          class="w-full text-sm text-gray-400 hover:text-white transition-colors py-2 mb-4"
+        >
+          Show intro again
+        </button>
 
         <!-- Reset / Done -->
         <div class="flex gap-2">
