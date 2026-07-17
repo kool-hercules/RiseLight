@@ -1,14 +1,16 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import type { LightMode, Settings } from '../types'
 
 interface Props {
   isOpen: boolean
   settings: Settings
+  previewMode: LightMode | null
+  saveFailed?: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
-// Event handlers
 const emit = defineEmits<{
   'close': []
   'update-wake-time': [time: string]
@@ -19,6 +21,30 @@ const emit = defineEmits<{
   'stop-preview': []
   'reset-settings': []
 }>()
+
+const modes: { key: LightMode; label: string; help: string }[] = [
+  { key: 'night', label: 'Night', help: 'Shown at bedtime until wake time — the “stay in bed” color.' },
+  { key: 'wake', label: 'Wake', help: 'Shown during the wake window as morning approaches.' },
+  { key: 'awake', label: 'Awake', help: 'Shown once it’s okay to get up.' }
+]
+
+// Confirmation gate so the destructive reset can't be triggered with one stray
+// tap next to "Done". Reset the gate whenever the panel's view changes.
+const confirmingReset = ref(false)
+watch(
+  () => [props.isOpen, props.previewMode] as const,
+  () => {
+    confirmingReset.value = false
+  }
+)
+
+const previewLabel = computed(() => modes.find(mode => mode.key === props.previewMode)?.label ?? '')
+const previewBrightness = computed(() =>
+  props.previewMode ? props.settings.brightness[props.previewMode] : 0
+)
+const previewColor = computed(() =>
+  props.previewMode ? props.settings.colors[props.previewMode] : '#000000'
+)
 
 const updateWakeTime = (event: Event) => {
   const target = event.target as HTMLInputElement
@@ -49,192 +75,223 @@ const updateColor = (state: keyof Settings['colors'], event: Event) => {
     emit('update-color', state, target.value)
   }
 }
+
+const updatePreviewBrightness = (event: Event) => {
+  if (props.previewMode) {
+    updateBrightness(props.previewMode, event)
+  }
+}
+
+const updatePreviewColor = (event: Event) => {
+  if (props.previewMode) {
+    updateColor(props.previewMode, event)
+  }
+}
+
+const confirmReset = () => {
+  emit('reset-settings')
+  confirmingReset.value = false
+}
 </script>
 
 <template>
-  <div
-    v-if="isOpen"
-    class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-    @click="$emit('close')"
-  >
+  <template v-if="isOpen">
+    <!-- Preview bar: no dark backdrop, so the full-screen preview is visible.
+         A slim control sits at the bottom to adjust or exit the preview. -->
     <div
-      class="settings-panel max-w-md w-full max-h-[90vh] overflow-y-auto"
-      @click.stop
+      v-if="previewMode"
+      class="fixed inset-x-0 bottom-0 z-50 p-4 flex justify-center pointer-events-none"
     >
-      <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-semibold">Night Light Settings</h2>
-        <button
-          @click="$emit('close')"
-          class="text-gray-400 hover:text-white transition-colors"
-        >
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Wake Time Setting -->
-      <div class="mb-6">
-        <label class="block text-sm font-medium mb-2">Wake Time</label>
-        <input
-          type="time"
-          :value="settings.wakeTime"
-          @input="updateWakeTime"
-          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-      </div>
-
-      <!-- Wake Duration Setting -->
-      <div class="mb-6">
-        <label class="block text-sm font-medium mb-2">
-          Wake Duration: {{ settings.wakeDuration }} minutes
+      <div class="settings-panel w-full max-w-md pointer-events-auto">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-sm font-medium">Previewing {{ previewLabel }} mode</span>
+          <input
+            type="color"
+            :value="previewColor"
+            @input="updatePreviewColor"
+            class="color-swatch"
+            aria-label="Preview color"
+          >
+        </div>
+        <label class="block text-xs text-gray-400 mb-1">
+          Brightness: {{ previewBrightness }}%
         </label>
         <input
           type="range"
-          min="1"
-          max="60"
-          step="1"
-          :value="settings.wakeDuration"
-          @input="updateWakeDuration"
-          class="slider w-full"
+          min="0"
+          max="100"
+          step="5"
+          :value="previewBrightness"
+          @input="updatePreviewBrightness"
+          class="slider w-full mb-4"
+          aria-label="Preview brightness"
         >
-        <div class="flex justify-between text-xs text-gray-400 mt-1">
-          <span>1 min</span>
-          <span>60 min</span>
-        </div>
-      </div>
-
-      <!-- Colors and Brightness -->
-      <div class="mb-6">
-        <h3 class="text-sm font-medium mb-3">Colors & Brightness</h3>
-        
-        <!-- Night Mode -->
-        <div class="mb-4 p-4 bg-gray-800/50 rounded-lg">
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-sm font-medium text-gray-200">Night Mode</label>
-            <input
-              type="color"
-              :value="settings.colors.night"
-              @input="updateColor('night', $event)"
-              class="bg-transparent border-0 w-8 h-8 cursor-pointer"
-            >
-          </div>
-          <div class="mb-2">
-            <label class="block text-xs text-gray-400 mb-1">
-              Brightness: {{ settings.brightness.night }}%
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              :value="settings.brightness.night"
-              @input="updateBrightness('night', $event)"
-              class="slider w-full"
-            >
-          </div>
+        <div class="flex gap-2">
           <button
-            @click="$emit('preview-mode', 'night')"
-            class="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+            @click="$emit('stop-preview')"
+            class="flex-1 control-button"
           >
-            Preview
+            Adjust settings
+          </button>
+          <button
+            @click="$emit('close')"
+            class="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-colors"
+          >
+            Done
           </button>
         </div>
-
-        <!-- Wake Mode -->
-        <div class="mb-4 p-4 bg-gray-800/50 rounded-lg">
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-sm font-medium text-gray-200">Wake Mode</label>
-            <input
-              type="color"
-              :value="settings.colors.wake"
-              @input="updateColor('wake', $event)"
-              class="bg-transparent border-0 w-8 h-8 cursor-pointer"
-            >
-          </div>
-          <div class="mb-2">
-            <label class="block text-xs text-gray-400 mb-1">
-              Brightness: {{ settings.brightness.wake }}%
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              :value="settings.brightness.wake"
-              @input="updateBrightness('wake', $event)"
-              class="slider w-full"
-            >
-          </div>
-          <button
-            @click="$emit('preview-mode', 'wake')"
-            class="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-          >
-            Preview
-          </button>
-        </div>
-
-        <!-- Awake Mode -->
-        <div class="mb-4 p-4 bg-gray-800/50 rounded-lg">
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-sm font-medium text-gray-200">Awake Mode</label>
-            <input
-              type="color"
-              :value="settings.colors.awake"
-              @input="updateColor('awake', $event)"
-              class="bg-transparent border-0 w-8 h-8 cursor-pointer"
-            >
-          </div>
-          <div class="mb-2">
-            <label class="block text-xs text-gray-400 mb-1">
-              Brightness: {{ settings.brightness.awake }}%
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              :value="settings.brightness.awake"
-              @input="updateBrightness('awake', $event)"
-              class="slider w-full"
-            >
-          </div>
-          <button
-            @click="$emit('preview-mode', 'awake')"
-            class="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-          >
-            Preview
-          </button>
-        </div>
-      </div>
-
-      <!-- Preview Control -->
-      <div class="mb-6">
-        <button
-          @click="$emit('stop-preview')"
-          class="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-colors"
-        >
-          Stop Preview
-        </button>
-      </div>
-
-      <!-- Reset Button -->
-      <div class="flex gap-2">
-        <button
-          @click="$emit('reset-settings')"
-          class="flex-1 bg-red-600 hover:bg-red-500 text-white py-2 px-4 rounded-lg transition-colors"
-        >
-          Reset to Default
-        </button>
-        <button
-          @click="$emit('close')"
-          class="flex-1 control-button"
-        >
-          Done
-        </button>
       </div>
     </div>
-  </div>
+
+    <!-- Full settings panel -->
+    <div
+      v-else
+      class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      @click="$emit('close')"
+    >
+      <div
+        class="settings-panel max-w-md w-full max-h-[90vh] overflow-y-auto"
+        @click.stop
+      >
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-semibold">Night Light Settings</h2>
+          <button
+            @click="$emit('close')"
+            class="text-gray-400 hover:text-white transition-colors"
+            aria-label="Close settings"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <p class="text-xs text-gray-400 mb-6 leading-relaxed">
+          The light shows a calm color while it’s time to stay in bed, shifts through a
+          wake window as morning nears, then turns to the “okay to get up” color.
+        </p>
+
+        <div
+          v-if="saveFailed"
+          class="mb-6 text-xs text-amber-300 bg-amber-900/30 border border-amber-700/50 rounded-lg p-3"
+        >
+          Settings may not be saved on this device — storage looks unavailable
+          (for example, private browsing). Changes will apply now but may not
+          survive a reload.
+        </div>
+
+        <!-- Wake Time Setting -->
+        <div class="mb-6">
+          <label class="block text-sm font-medium mb-2">Wake Time</label>
+          <input
+            type="time"
+            :value="settings.wakeTime"
+            @input="updateWakeTime"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+          <p class="text-xs text-gray-500 mt-1">When the wake window begins each morning.</p>
+        </div>
+
+        <!-- Wake Duration Setting -->
+        <div class="mb-6">
+          <label class="block text-sm font-medium mb-2">
+            Wake Duration: {{ settings.wakeDuration }} minutes
+          </label>
+          <input
+            type="range"
+            min="1"
+            max="60"
+            step="1"
+            :value="settings.wakeDuration"
+            @input="updateWakeDuration"
+            class="slider w-full"
+          >
+          <div class="flex justify-between text-xs text-gray-400 mt-1">
+            <span>1 min</span>
+            <span>60 min</span>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">
+            How long the wake color shows before switching to “okay to get up”.
+          </p>
+        </div>
+
+        <!-- Colors and Brightness -->
+        <div class="mb-6">
+          <h3 class="text-sm font-medium mb-3">Colors &amp; Brightness</h3>
+
+          <div
+            v-for="mode in modes"
+            :key="mode.key"
+            class="mb-4 p-4 bg-gray-800/50 rounded-lg"
+          >
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-sm font-medium text-gray-200">{{ mode.label }} Mode</label>
+              <input
+                type="color"
+                :value="settings.colors[mode.key]"
+                @input="updateColor(mode.key, $event)"
+                class="color-swatch"
+                :aria-label="`${mode.label} color`"
+              >
+            </div>
+            <p class="text-xs text-gray-500 mb-2">{{ mode.help }}</p>
+            <div class="mb-3">
+              <label class="block text-xs text-gray-400 mb-1">
+                Brightness: {{ settings.brightness[mode.key] }}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                :value="settings.brightness[mode.key]"
+                @input="updateBrightness(mode.key, $event)"
+                class="slider w-full"
+              >
+            </div>
+            <button
+              @click="$emit('preview-mode', mode.key)"
+              class="preview-button"
+            >
+              Preview {{ mode.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Reset / Done -->
+        <div class="flex gap-2">
+          <template v-if="!confirmingReset">
+            <button
+              @click="confirmingReset = true"
+              class="flex-1 bg-red-600/80 hover:bg-red-500 text-white py-2 px-4 rounded-lg transition-colors"
+            >
+              Reset to Default
+            </button>
+            <button
+              @click="$emit('close')"
+              class="flex-1 control-button"
+            >
+              Done
+            </button>
+          </template>
+          <template v-else>
+            <button
+              @click="confirmReset"
+              class="flex-1 bg-red-600 hover:bg-red-500 text-white py-2 px-4 rounded-lg transition-colors"
+            >
+              Confirm reset
+            </button>
+            <button
+              @click="confirmingReset = false"
+              class="flex-1 control-button"
+            >
+              Cancel
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+  </template>
 </template>
 
 <style scoped>
@@ -255,6 +312,19 @@ const updateColor = (state: keyof Settings['colors'], event: Event) => {
 
 .settings-panel::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+
+/* Touch-friendly color swatch (>= 44px hit area) */
+.color-swatch {
+  @apply bg-transparent border-0 rounded cursor-pointer;
+  width: 44px;
+  height: 44px;
+}
+
+/* Preview as a real, tappable button rather than a tiny text link */
+.preview-button {
+  @apply w-full bg-gray-700/60 hover:bg-gray-600 text-blue-200 text-sm rounded-lg transition-colors;
+  min-height: 44px;
 }
 
 /* Ensure inputs are touch-friendly on mobile */

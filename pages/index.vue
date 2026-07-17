@@ -7,28 +7,29 @@
       :status-message="statusMessage"
       :format-time-remaining="formatTimeRemaining"
       :current-time="currentTime"
-      @toggle-nightlight="handleToggleNightLight"
+      @toggle-nightlight="toggleNightLight"
       @toggle-settings="toggleSettings"
     />
-    
+
     <SettingsPanel
       :is-open="isSettingsOpen"
       :settings="settings"
-      @close="toggleSettings"
-      @update-wake-time="handleUpdateWakeTime"
-      @update-wake-duration="handleUpdateWakeDuration"
-      @update-brightness="handleUpdateBrightness"
-      @update-color="handleUpdateColor"
-      @preview-mode="handlePreviewMode"
-      @stop-preview="handleStopPreview"
-      @reset-settings="handleResetSettings"
+      :preview-mode="previewMode"
+      :save-failed="saveFailed"
+      @close="closeSettings"
+      @update-wake-time="updateWakeTime"
+      @update-wake-duration="updateWakeDuration"
+      @update-brightness="updateBrightness"
+      @update-color="updateColor"
+      @preview-mode="startPreview"
+      @stop-preview="stopPreview"
+      @reset-settings="resetSettings"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount } from 'vue'
-import type { LightMode, Settings } from '../types'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 
@@ -37,84 +38,56 @@ useHead({
   title: 'RiseLight',
   meta: [
     { name: 'description', content: 'A color-changing light that helps kids know when it’s time to stay in bed –– and when it’s okay to rise.' },
-    { name: 'viewport', content: 'width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover' }
+    { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }
   ]
 })
 
-// Import composables
-const settingsComposable = useSettings()
-
-// Extract reactive refs from composables
 const {
   settings,
   isSettingsOpen,
+  saveFailed,
   toggleSettings,
   updateWakeTime,
   updateWakeDuration,
   updateBrightness,
   updateColor,
   resetSettings
-} = settingsComposable
-
-const nightLightComposable = useNightLight(settings)
+} = useSettings()
 
 const {
   currentTime,
   isActive,
   currentColor,
+  previewMode,
   formatTimeRemaining,
   getCurrentBrightness,
   statusMessage,
-  startNightLight,
-  stopNightLight,
   toggleNightLight,
   startPreview,
   stopPreview
-} = nightLightComposable
+} = useNightLight(settings)
 
-// Event handlers
-const handleToggleNightLight = () => {
-  toggleNightLight()
-}
-
-const handleUpdateWakeTime = (time: string) => {
-  updateWakeTime(time)
-}
-
-const handleUpdateWakeDuration = (duration: number) => {
-  updateWakeDuration(duration)
-}
-
-const handleUpdateBrightness = (state: keyof Settings['brightness'], value: number) => {
-  updateBrightness(state, value)
-}
-
-const handleUpdateColor = (state: keyof Settings['colors'], color: string) => {
-  updateColor(state, color)
-}
-
-const handlePreviewMode = (mode: LightMode) => {
-  startPreview(mode)
-}
-
-const handleStopPreview = () => {
+// Closing settings always ends any active preview so the light never gets
+// stuck overriding the real schedule after the panel is dismissed.
+const closeSettings = () => {
   stopPreview()
-}
-
-const handleResetSettings = () => {
-  resetSettings()
+  if (isSettingsOpen.value) {
+    toggleSettings()
+  }
 }
 
 // Keyboard shortcuts
 const handleKeyDown = (event: KeyboardEvent) => {
   switch (event.key) {
     case ' ':
-      event.preventDefault()
-      handleToggleNightLight()
+      if (!isSettingsOpen.value) {
+        event.preventDefault()
+        toggleNightLight()
+      }
       break
     case 'Escape':
       if (isSettingsOpen.value) {
-        toggleSettings()
+        closeSettings()
       }
       break
     case 's':
@@ -131,14 +104,11 @@ const handleContextMenu = (event: Event) => {
   event.preventDefault()
 }
 
-// Lifecycle
 onMounted(() => {
-  // Add event listeners
   document.addEventListener('keydown', handleKeyDown)
   document.addEventListener('contextmenu', handleContextMenu)
 })
 
-// Cleanup on unmount
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeyDown)
   document.removeEventListener('contextmenu', handleContextMenu)
