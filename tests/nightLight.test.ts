@@ -120,6 +120,59 @@ describe('active settings updates', () => {
   })
 })
 
+describe('sunrise ramp (display color/brightness)', () => {
+  it('shows the exact night color/brightness at the window start with no seam', () => {
+    const { runtime, settings } = createRuntime(localDate(5, 0))
+    settings.value.wakeTime = '06:30'
+    settings.value.wakeDuration = 30
+    runtime.startNightLight()
+
+    expect(runtime.currentState.value).toBe('night')
+    expect(runtime.displayColor.value).toBe(settings.value.colors.night)
+    expect(runtime.displayBrightness.value).toBe(settings.value.brightness.night / 100)
+    runtime.dispose()
+  })
+
+  it('eases through the wake keyframe at the window midpoint', () => {
+    const { clock, runtime, settings } = createRuntime(localDate(6, 30))
+    settings.value.wakeTime = '06:30'
+    settings.value.wakeDuration = 30
+    runtime.startNightLight()
+
+    // 15 minutes into a 30-minute window is the midpoint → the wake keyframe.
+    clock.set(localDate(6, 45))
+    runtime.refresh()
+    expect(runtime.currentState.value).toBe('wake')
+    expect(runtime.rampProgress.value).toBeCloseTo(0.5, 5)
+    expect(runtime.displayColor.value).toBe(settings.value.colors.wake)
+    expect(runtime.displayBrightness.value).toBeCloseTo(settings.value.brightness.wake / 100, 5)
+    runtime.dispose()
+  })
+
+  it('lands on the awake color/brightness as the window closes', () => {
+    const { clock, runtime, settings } = createRuntime(localDate(6, 30))
+    settings.value.wakeTime = '06:30'
+    settings.value.wakeDuration = 30
+    runtime.startNightLight()
+
+    clock.set(localDate(7, 0))
+    runtime.refresh()
+    expect(runtime.currentState.value).toBe('awake')
+    expect(runtime.displayColor.value).toBe(settings.value.colors.awake)
+    expect(runtime.displayBrightness.value).toBe(settings.value.brightness.awake / 100)
+    runtime.dispose()
+  })
+
+  it('does not ramp a previewed mode — it shows that mode exactly', () => {
+    const { runtime, settings } = createRuntime()
+    runtime.startPreview('wake')
+    expect(runtime.rampProgress.value).toBe(0)
+    expect(runtime.displayColor.value).toBe(settings.value.colors.wake)
+    expect(runtime.displayBrightness.value).toBe(settings.value.brightness.wake / 100)
+    runtime.dispose()
+  })
+})
+
 describe('mode previews', () => {
   it('uses the selected mode brightness when colors are duplicated', () => {
     const { runtime, settings } = createRuntime()

@@ -10,6 +10,7 @@ import {
 import type { LightColor, LightMode, LightState, Settings, TimerInfo } from '../types'
 import { MODE_PRESENTATION } from '../utils/modes'
 import { createDevClock } from '../utils/devClock'
+import { rampBrightness, rampColor } from '../utils/ramp'
 import { calculateNextWakeTime, calculateScheduleState } from '../utils/schedule'
 import { clearActiveSession, readActiveSession, saveActiveSession } from '../utils/session'
 import { getBrowserStorage, type StorageLike } from '../utils/settings'
@@ -174,6 +175,49 @@ export const createNightLightRuntime = (
     return displayMode.value ? settings.value.brightness[displayMode.value] / 100 : 0
   })
 
+  // How far we are through the live wake window: 0 at its start, 1 at its end.
+  // Only meaningful (and non-zero) while the schedule is actually in the wake
+  // state; previews and the flat night/awake states don't ramp.
+  const rampProgress = computed(() => {
+    if (previewMode.value || currentState.value !== 'wake') {
+      return 0
+    }
+
+    const windowMs = settings.value.wakeDuration * 60 * 1000
+    if (windowMs <= 0) {
+      return 1
+    }
+
+    return Math.min(1, Math.max(0, 1 - timeRemaining.value / windowMs))
+  })
+
+  // What actually paints the screen. Identical to the discrete color/brightness
+  // everywhere except the live wake window, where it eases continuously through
+  // the night → wake → awake keyframes so there is no hard color swap.
+  const displayColor = computed<LightColor>(() => {
+    if (!displayMode.value) {
+      return '#ffffff'
+    }
+
+    if (!previewMode.value && currentState.value === 'wake') {
+      return rampColor(rampProgress.value, settings.value.colors)
+    }
+
+    return settings.value.colors[displayMode.value]
+  })
+
+  const displayBrightness = computed(() => {
+    if (!displayMode.value) {
+      return 0
+    }
+
+    if (!previewMode.value && currentState.value === 'wake') {
+      return rampBrightness(rampProgress.value, settings.value.brightness) / 100
+    }
+
+    return settings.value.brightness[displayMode.value] / 100
+  })
+
   const isPreviewMode = computed(() => previewMode.value !== null)
 
   const formatTimeRemaining = computed(() => {
@@ -256,6 +300,9 @@ export const createNightLightRuntime = (
     isActive: readonly(isActive),
     currentState: readonly(currentState),
     currentColor,
+    displayColor,
+    displayBrightness,
+    rampProgress,
     timeRemaining: readonly(timeRemaining),
     nextWakeTime: readonly(nextWakeTime),
     previewMode: readonly(previewMode),

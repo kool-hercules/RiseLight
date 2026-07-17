@@ -1,8 +1,8 @@
 <template>
   <div class="app-container">
     <NightLight
-      :current-color="currentColor"
-      :brightness="getCurrentBrightness"
+      :current-color="displayColor"
+      :brightness="displayBrightness"
       :is-active="isActive"
       :current-state="currentState"
       :format-time-remaining="formatTimeRemaining"
@@ -68,7 +68,8 @@ const {
 const {
   currentTime,
   isActive,
-  currentColor,
+  displayColor,
+  displayBrightness,
   currentState,
   previewMode,
   formatTimeRemaining,
