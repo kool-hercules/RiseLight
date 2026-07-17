@@ -5,19 +5,8 @@
 </template>
 
 <script setup lang="ts">
-// Global app configuration
-useHead({
-  htmlAttrs: {
-    lang: 'en'
-  },
-  meta: [
-    { name: 'charset', content: 'utf-8' },
-    { name: 'viewport', content: 'width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover' },
-    { name: 'apple-mobile-web-app-capable', content: 'yes' },
-    { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
-    { name: 'theme-color', content: '#000000' }
-  ]
-})
+// Global head (title, viewport, PWA manifest, icons, theme color) lives in
+// nuxt.config.ts app.head so it lands in the prerendered HTML shell.
 </script>
 
 <style>

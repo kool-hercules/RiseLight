@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RiseLight">
+  <defs>
+    <linearGradient id="sky" x1="256" y1="0" x2="256" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#141d33"/>
+      <stop offset="1" stop-color="#05070d"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="256" cy="292" r="118" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe6a8"/>
+      <stop offset="0.45" stop-color="#ff9f43"/>
+      <stop offset="1" stop-color="#ff5a3c"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="256" cy="300" r="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff9f43" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ff9f43" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Full-bleed dark background; content is kept inside the maskable safe zone -->
+  <rect width="512" height="512" fill="url(#sky)"/>
+
+  <!-- Warm glow of the rising sun -->
+  <circle cx="256" cy="300" r="180" fill="url(#glow)"/>
+
+  <!-- Rays -->
+  <g stroke="#ffca7a" stroke-width="14" stroke-linecap="round" opacity="0.9">
+    <line x1="256" y1="150" x2="256" y2="196"/>
+    <line x1="152" y1="192" x2="184" y2="224"/>
+    <line x1="360" y1="192" x2="328" y2="224"/>
+    <line x1="120" y1="296" x2="164" y2="296"/>
+    <line x1="392" y1="296" x2="348" y2="296"/>
+  </g>
+
+  <!-- Sun disc -->
+  <circle cx="256" cy="292" r="80" fill="url(#sun)"/>
+
+  <!-- Horizon -->
+  <g stroke="#8ea0c8" stroke-linecap="round">
+    <line x1="104" y1="356" x2="408" y2="356" stroke-width="12" opacity="0.85"/>
+    <line x1="150" y1="392" x2="362" y2="392" stroke-width="12" opacity="0.5"/>
+  </g>
+</svg>

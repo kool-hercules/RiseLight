@@ -46,15 +46,6 @@ import { useOnboarding } from '../composables/useOnboarding'
 import { useWakeLock } from '../composables/useWakeLock'
 import { useChime } from '../composables/useChime'
 
-// Page meta
-useHead({
-  title: 'RiseLight',
-  meta: [
-    { name: 'description', content: 'A color-changing light that helps kids know when it’s time to stay in bed –– and when it’s okay to rise.' },
-    { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }
-  ]
-})
-
 const {
   settings,
   isSettingsOpen,
