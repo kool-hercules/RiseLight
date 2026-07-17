@@ -6,9 +6,18 @@
   html {
     @apply h-full;
   }
-  
+
   body {
     @apply h-full bg-black text-white overflow-hidden;
+  }
+
+  /* A single, always-visible keyboard focus ring. Pointer interaction never
+     shows it (:focus-visible), so it aids keyboard/VoiceOver users without
+     cluttering touch use. */
+  :focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 

@@ -16,12 +16,12 @@
     </div>
 
     <!-- Center: teaches the current state at a glance, then the control -->
-    <div class="absolute inset-0 flex items-center justify-center z-10 px-6">
-      <div class="text-center">
+    <div class="center-stage absolute inset-0 flex items-center justify-center z-10">
+      <div class="text-center legible">
         <div :style="chromeStyle">
           <ModeIcon :name="displayIcon" class="w-14 h-14 mx-auto mb-4 text-white/90" />
           <div class="text-3xl font-semibold mb-1">{{ headline }}</div>
-          <div class="text-sm text-white/70 mb-8 min-h-[1.25rem]">{{ detail }}</div>
+          <div class="text-sm text-white/80 mb-8 min-h-[1.25rem]">{{ detail }}</div>
         </div>
         <button
           @click.stop="$emit('toggle-nightlight')"
@@ -149,6 +149,21 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* Clear the notch/home-indicator on all sides; extra horizontal room so the
+   teaching text and control never sit under a landscape notch. */
+.center-stage {
+  padding-top: max(1.5rem, env(safe-area-inset-top, 0px));
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+}
+
+/* Lift the dim teaching text off the colored glow so it stays readable at any
+   brightness/color the schedule produces. */
+.legible {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
 @media (orientation: landscape) {
   .time-display {
     @apply text-3xl;

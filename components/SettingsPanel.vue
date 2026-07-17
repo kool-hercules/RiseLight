@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { LightMode, Settings } from '../types'
 import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
 import ModeIcon from './ModeIcon.vue'
@@ -27,6 +27,20 @@ const emit = defineEmits<{
 }>()
 
 const modes = MODE_ORDER.map(key => ({ key, ...MODE_PRESENTATION[key] }))
+
+// Move focus into the preview dock when it opens so keyboard users land on its
+// controls instead of being stranded behind the full-screen preview.
+const previewDock = ref<HTMLElement | null>(null)
+watch(
+  () => props.previewMode,
+  mode => {
+    if (mode) {
+      void nextTick(() => {
+        previewDock.value?.querySelector<HTMLButtonElement>('button')?.focus()
+      })
+    }
+  }
+)
 
 // Confirmation gate so the destructive reset can't be triggered with one stray
 // tap next to "Done". Reset the gate whenever the panel's view changes.
@@ -106,9 +120,9 @@ const confirmReset = () => {
          A slim control sits at the bottom to adjust or exit the preview. -->
     <div
       v-if="previewMode"
-      class="fixed inset-x-0 bottom-0 z-50 p-4 flex justify-center pointer-events-none"
+      class="preview-dock fixed inset-x-0 bottom-0 z-50 flex justify-center pointer-events-none"
     >
-      <div class="settings-panel w-full max-w-md pointer-events-auto">
+      <div ref="previewDock" class="settings-panel w-full max-w-md pointer-events-auto">
         <div class="flex items-center justify-between mb-3">
           <span class="text-sm font-medium">Previewing “{{ previewLabel }}”</span>
           <input
@@ -152,7 +166,7 @@ const confirmReset = () => {
     <!-- Full settings panel -->
     <div
       v-else
-      class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      class="settings-scrim fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
       @click="$emit('close')"
     >
       <div
@@ -328,6 +342,23 @@ const confirmReset = () => {
 </template>
 
 <style scoped>
+/* Keep the preview dock and settings panel clear of the notch and home
+   indicator in both orientations. */
+.preview-dock {
+  padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+.settings-scrim {
+  padding: 1rem;
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
 /* Custom scrollbar for settings panel */
 .settings-panel::-webkit-scrollbar {
   width: 6px;

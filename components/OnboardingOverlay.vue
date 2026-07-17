@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import type { Settings } from '../types'
 import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
 import ModeIcon from './ModeIcon.vue'
@@ -12,6 +13,14 @@ const emit = defineEmits<{
 
 const modes = MODE_ORDER.map(key => ({ key, ...MODE_PRESENTATION[key] }))
 
+const titleRef = ref<HTMLElement | null>(null)
+
+// Move focus into the dialog so keyboard users start inside it and VoiceOver
+// announces the intro title rather than leaving focus on the page behind.
+onMounted(() => {
+  titleRef.value?.focus()
+})
+
 const onWakeTimeInput = (event: Event) => {
   const target = event.target as HTMLInputElement
   if (target.value) {
@@ -22,14 +31,19 @@ const onWakeTimeInput = (event: Event) => {
 
 <template>
   <div
-    class="fixed inset-0 z-[60] bg-gray-950 flex items-center justify-center p-4 overflow-y-auto"
+    class="onboarding-scrim fixed inset-0 z-[60] bg-gray-950 flex items-center justify-center overflow-y-auto"
     role="dialog"
     aria-modal="true"
     aria-labelledby="onboarding-title"
   >
     <div class="w-full max-w-md py-8">
       <div class="text-center mb-8">
-        <h1 id="onboarding-title" class="text-3xl font-semibold mb-2">Welcome to RiseLight</h1>
+        <h1
+          id="onboarding-title"
+          ref="titleRef"
+          tabindex="-1"
+          class="text-3xl font-semibold mb-2 outline-none"
+        >Welcome to RiseLight</h1>
         <p class="text-sm text-gray-400 leading-relaxed">
           A gentle light that tells little ones — at a glance — when to stay in
           bed and when it’s okay to get up.
@@ -87,3 +101,14 @@ const onWakeTimeInput = (event: Event) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Keep the intro clear of the notch and home indicator in both orientations. */
+.onboarding-scrim {
+  padding: 1rem;
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+</style>
