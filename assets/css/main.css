@@ -14,11 +14,27 @@
 
 @layer components {
   .night-light {
-    @apply w-full h-full transition-all duration-1000 ease-in-out;
+    @apply relative overflow-hidden;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* The glow lives on its own layer so its opacity (down to 0 when the light is
+     off or brightness is 0) never hides the controls, which sit above it. */
+  .light-layer {
+    @apply absolute inset-0 transition-all duration-1000 ease-in-out;
     background: radial-gradient(circle at center, var(--light-color) 0%, transparent 70%);
     opacity: var(--light-opacity);
+    pointer-events: none;
   }
-  
+
+  @media (prefers-reduced-motion: reduce) {
+    .light-layer {
+      transition: none;
+    }
+  }
+
   .settings-panel {
     @apply bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-6 shadow-2xl;
   }
