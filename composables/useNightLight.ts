@@ -9,6 +9,7 @@ import {
 } from 'vue'
 import type { LightColor, LightMode, LightState, Settings, TimerInfo } from '../types'
 import { MODE_PRESENTATION } from '../utils/modes'
+import { createDevClock } from '../utils/devClock'
 import { calculateNextWakeTime, calculateScheduleState } from '../utils/schedule'
 import { clearActiveSession, readActiveSession, saveActiveSession } from '../utils/session'
 import { getBrowserStorage, type StorageLike } from '../utils/settings'
@@ -280,7 +281,13 @@ export const createNightLightRuntime = (
 }
 
 export const useNightLight = (settings: Readonly<Ref<Settings>>) => {
-  const runtime = createNightLightRuntime(settings)
+  // Opt into an accelerated QA clock when the URL asks for one; otherwise the
+  // runtime falls back to the real wall clock. Inert for normal visitors.
+  const devNow = typeof window !== 'undefined'
+    ? createDevClock(window.location.search)
+    : null
+
+  const runtime = createNightLightRuntime(settings, devNow ? { now: devNow } : {})
 
   const handleVisibilityChange = (): void => {
     if (document.visibilityState === 'visible') {
