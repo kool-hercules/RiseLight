@@ -54,6 +54,7 @@ describe('settings persistence', () => {
     expect(settings).toEqual({
       wakeTime: '07:05',
       wakeDuration: 60,
+      chimeEnabled: false,
       brightness: {
         night: 0,
         wake: 0,
@@ -110,6 +111,7 @@ describe('settings persistence', () => {
     expect(loadSettingsFromStorage(storage)).toEqual({
       wakeTime: '05:45',
       wakeDuration: 20,
+      chimeEnabled: false,
       brightness: {
         night: 0,
         wake: 65,
@@ -121,6 +123,26 @@ describe('settings persistence', () => {
         awake: '#ec4899'
       }
     })
+  })
+
+  it('round-trips the chime toggle and defaults it off for legacy data', () => {
+    const withChime = new MemoryStorage()
+    const on = createDefaultSettings()
+    on.chimeEnabled = true
+    saveSettingsToStorage(withChime, on)
+    expect(loadSettingsFromStorage(withChime).chimeEnabled).toBe(true)
+
+    // Legacy record predating the flag → stays off.
+    const legacy = new MemoryStorage({
+      [SETTINGS_STORAGE_KEY]: JSON.stringify({ wakeTime: '06:00', wakeDuration: 15 })
+    })
+    expect(loadSettingsFromStorage(legacy).chimeEnabled).toBe(false)
+
+    // A non-boolean value is ignored rather than coerced.
+    const bogus = new MemoryStorage({
+      [SETTINGS_STORAGE_KEY]: JSON.stringify({ chimeEnabled: 'yes' })
+    })
+    expect(loadSettingsFromStorage(bogus).chimeEnabled).toBe(false)
   })
 })
 

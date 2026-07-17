@@ -8,7 +8,7 @@
       :format-time-remaining="formatTimeRemaining"
       :format-okay-to-rise="formatOkayToRiseTime"
       :current-time="currentTime"
-      @toggle-nightlight="toggleNightLight"
+      @toggle-nightlight="handleToggleNightLight"
       @toggle-settings="toggleSettings"
     />
 
@@ -22,6 +22,7 @@
       @update-wake-duration="updateWakeDuration"
       @update-brightness="updateBrightness"
       @update-color="updateColor"
+      @update-chime="updateChimeEnabled"
       @preview-mode="startPreview"
       @stop-preview="stopPreview"
       @reset-settings="resetSettings"
@@ -38,11 +39,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue'
+import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'
 import { useWakeLock } from '../composables/useWakeLock'
+import { useChime } from '../composables/useChime'
 
 // Page meta
 useHead({
@@ -62,6 +64,7 @@ const {
   updateWakeDuration,
   updateBrightness,
   updateColor,
+  updateChimeEnabled,
   resetSettings
 } = useSettings()
 
@@ -85,6 +88,31 @@ const { showOnboarding, completeOnboarding, restartOnboarding } = useOnboarding(
 // Keep the screen awake while the light is on — a night light that sleeps is
 // useless.
 useWakeLock(isActive)
+
+// Optional "okay to get up" chime. Priming happens inside the Turn On tap so the
+// autonomous transition hours later can still play audio on iOS.
+const chime = useChime(computed(() => settings.value.chimeEnabled))
+
+// Turning on is the one guaranteed user gesture, so unlock audio there.
+const handleToggleNightLight = () => {
+  if (!isActive.value) {
+    chime.prime()
+  }
+  toggleNightLight()
+}
+
+// Sound the chime only when the schedule autonomously crosses into "okay to get
+// up" from an active earlier state. Restores (inactive → awake) and turning on
+// into an already-awake window don't chime.
+watch(currentState, (state, previous) => {
+  if (
+    state === 'awake'
+    && (previous === 'night' || previous === 'wake')
+    && isActive.value
+  ) {
+    chime.play()
+  }
+})
 
 // Closing settings always ends any active preview so the light never gets
 // stuck overriding the real schedule after the panel is dismissed.
@@ -112,7 +140,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
     case ' ':
       if (!isSettingsOpen.value) {
         event.preventDefault()
-        toggleNightLight()
+        handleToggleNightLight()
       }
       break
     case 'Escape':

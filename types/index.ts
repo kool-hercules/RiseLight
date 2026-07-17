@@ -7,6 +7,7 @@ export type LightState = 'inactive' | LightMode
 export type Settings = {
   wakeTime: string // HH:MM format
   wakeDuration: number // minutes
+  chimeEnabled: boolean // play a gentle chime when it becomes okay to get up
   brightness: {
     night: number
     wake: number

@@ -19,6 +19,7 @@ const emit = defineEmits<{
   'update-wake-duration': [duration: number]
   'update-brightness': [state: keyof Settings['brightness'], value: number]
   'update-color': [state: keyof Settings['colors'], color: string]
+  'update-chime': [enabled: boolean]
   'preview-mode': [mode: LightMode]
   'stop-preview': []
   'reset-settings': []
@@ -87,6 +88,10 @@ const updatePreviewColor = (event: Event) => {
   if (props.previewMode) {
     updateColor(props.previewMode, event)
   }
+}
+
+const onChimeToggle = (event: Event) => {
+  emit('update-chime', (event.target as HTMLInputElement).checked)
 }
 
 const confirmReset = () => {
@@ -209,6 +214,26 @@ const confirmReset = () => {
           <p class="text-xs text-gray-500 mt-1">
             How long the “almost time” color shows before it becomes “okay to get up”.
           </p>
+        </div>
+
+        <!-- Okay-to-get-up chime -->
+        <div class="mb-6">
+          <label class="flex items-center justify-between gap-4 cursor-pointer">
+            <span>
+              <span class="block text-sm font-medium">Okay-to-get-up chime</span>
+              <span class="block text-xs text-gray-500 mt-1">
+                A gentle sound when it becomes okay to get up. Off by default.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              :checked="settings.chimeEnabled"
+              @change="onChimeToggle"
+              class="chime-toggle shrink-0"
+              aria-label="Play a chime when it becomes okay to get up"
+            >
+          </label>
         </div>
 
         <!-- Colors and Brightness -->
@@ -339,5 +364,51 @@ const confirmReset = () => {
 input[type="time"],
 input[type="range"] {
   touch-action: manipulation;
+}
+
+/* iOS-style toggle switch with a comfortable touch target */
+.chime-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 52px;
+  height: 32px;
+  border-radius: 9999px;
+  background: #4b5563;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  touch-action: manipulation;
+}
+
+.chime-toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+
+.chime-toggle:checked {
+  background: #34c759;
+}
+
+.chime-toggle:checked::after {
+  transform: translateX(20px);
+}
+
+.chime-toggle:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chime-toggle,
+  .chime-toggle::after {
+    transition: none;
+  }
 }
 </style>

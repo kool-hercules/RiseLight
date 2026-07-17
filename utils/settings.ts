@@ -37,6 +37,7 @@ const legacyColors: Record<LightMode, string> = {
 export const createDefaultSettings = (): Settings => ({
   wakeTime: '06:30',
   wakeDuration: 30,
+  chimeEnabled: false,
   brightness: {
     night: 20,
     wake: 45,
@@ -138,6 +139,9 @@ export const parseSettings = (stored: unknown): Settings => {
       ? normalizeWakeTime(source.wakeTime)
       : defaults.wakeTime,
     wakeDuration: Math.round(wakeDuration),
+    chimeEnabled: typeof source.chimeEnabled === 'boolean'
+      ? source.chimeEnabled
+      : defaults.chimeEnabled,
     brightness,
     colors
   }

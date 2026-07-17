@@ -77,6 +77,10 @@ const updateColor = (mode: keyof Settings['colors'], color: string): void => {
   }
 }
 
+const updateChimeEnabled = (enabled: boolean): void => {
+  settingsState.value.chimeEnabled = Boolean(enabled)
+}
+
 const toggleSettings = (): void => {
   isSettingsOpen.value = !isSettingsOpen.value
 }
@@ -110,6 +114,7 @@ const settingsApi = {
   updateWakeDuration,
   updateBrightness,
   updateColor,
+  updateChimeEnabled,
   toggleSettings,
   resetSettings,
   exportSettings,
