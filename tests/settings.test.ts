@@ -61,8 +61,8 @@ describe('settings persistence', () => {
       },
       colors: {
         night: '#112233',
-        wake: '#ffff00',
-        awake: '#00ff00'
+        wake: '#ff9500',
+        awake: '#34c759'
       },
       soundEnabled: false
     })
@@ -90,8 +90,8 @@ describe('settings persistence', () => {
 
     expect(settings.wakeTime).toBe('06:30')
     expect(settings.wakeDuration).toBe(30)
-    expect(settings.brightness).toEqual({ night: 50, wake: 35, awake: 80 })
-    expect(settings.colors).toEqual({ night: '#abcdef', wake: '#ffff00', awake: '#123456' })
+    expect(settings.brightness).toEqual({ night: 20, wake: 35, awake: 65 })
+    expect(settings.colors).toEqual({ night: '#abcdef', wake: '#ff9500', awake: '#123456' })
     expect(settings.soundEnabled).toBe(true)
   })
 

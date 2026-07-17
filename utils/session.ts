@@ -58,7 +58,8 @@ export const readActiveSession = (storage: StorageLike | null, now: Date): Date 
     }
 
     return new Date(parsed.wakeAt)
-  } catch {
+  } catch (error) {
+    console.warn('RiseLight: unable to restore active session; starting off.', error)
     return null
   }
 }

@@ -30,18 +30,22 @@ const legacyColors: Record<LightMode, string> = {
   awake: '#ec4899'
 }
 
+// Bedroom-tuned defaults: a dim warm red for "stay in bed" (low blue light),
+// easing to amber during the wake window, then a gentle green for "okay to get
+// up". Brightness climbs with the cycle but stays low enough not to light up a
+// dark room.
 export const createDefaultSettings = (): Settings => ({
   wakeTime: '06:30',
   wakeDuration: 30,
   brightness: {
-    night: 50,
-    wake: 70,
-    awake: 80
+    night: 20,
+    wake: 45,
+    awake: 65
   },
   colors: {
-    night: '#ff0000',
-    wake: '#ffff00',
-    awake: '#00ff00'
+    night: '#ff3b30',
+    wake: '#ff9500',
+    awake: '#34c759'
   },
   soundEnabled: false
 })
@@ -66,7 +70,7 @@ export const isValidBrightness = (brightness: unknown): brightness is number => 
   return typeof brightness === 'number' && Number.isFinite(brightness) && brightness >= 0 && brightness <= 100
 }
 
-const normalizeWakeTime = (time: string): string => {
+export const normalizeWakeTime = (time: string): string => {
   const [hours, minutes] = time.split(':')
   return `${hours.padStart(2, '0')}:${minutes}`
 }
@@ -147,7 +151,8 @@ export const parseSettingsJson = (settingsJson: string): Settings | null => {
   try {
     const parsed: unknown = JSON.parse(settingsJson)
     return settingsPayload(parsed) ? parseSettings(parsed) : null
-  } catch {
+  } catch (error) {
+    console.warn('RiseLight: failed to parse stored settings; using defaults.', error)
     return null
   }
 }
@@ -185,7 +190,8 @@ export const loadSettingsFromStorage = (storage: StorageLike | null): Settings =
     }
 
     return parseSettingsJson(stored) ?? createDefaultSettings()
-  } catch {
+  } catch (error) {
+    console.warn('RiseLight: unable to read stored settings; using defaults.', error)
     return createDefaultSettings()
   }
 }

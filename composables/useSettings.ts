@@ -1,4 +1,4 @@
-import { computed, readonly, ref, watch } from 'vue'
+import { readonly, ref, watch } from 'vue'
 import type { Settings } from '../types'
 import {
   createDefaultSettings,
@@ -8,6 +8,7 @@ import {
   isValidDuration,
   isValidWakeTime,
   loadSettingsFromStorage,
+  normalizeWakeTime,
   parseSettingsJson,
   saveSettingsToStorage,
   serializeSettings
@@ -18,10 +19,31 @@ import {
 const settingsState = ref<Settings>(createDefaultSettings())
 const isSettingsOpen = ref(false)
 const sharedSettings = readonly(settingsState)
+// True when storage exists but the last write was rejected (private mode / full
+// quota) so the UI can warn that customizations may not survive a reload.
+const saveFailed = ref(false)
 let hasInitialized = false
+let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 const saveSettings = (): boolean => {
-  return saveSettingsToStorage(getBrowserStorage(), settingsState.value)
+  const storage = getBrowserStorage()
+  if (!storage) {
+    return false
+  }
+
+  const ok = saveSettingsToStorage(storage, settingsState.value)
+  saveFailed.value = !ok
+  return ok
+}
+
+// Slider drags emit a burst of mutations; debounce so we serialize and hit
+// localStorage once the value settles instead of on every intermediate step.
+const scheduleSave = (): void => {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+  }
+
+  saveTimer = setTimeout(saveSettings, 150)
 }
 
 const loadSettings = (): void => {
@@ -29,15 +51,11 @@ const loadSettings = (): void => {
   hasInitialized = true
 }
 
-watch(settingsState, saveSettings, { deep: true })
-
-const wakeTimeHour = computed(() => Number.parseInt(settingsState.value.wakeTime.split(':')[0]))
-const wakeTimeMinute = computed(() => Number.parseInt(settingsState.value.wakeTime.split(':')[1]))
+watch(settingsState, scheduleSave, { deep: true })
 
 const updateWakeTime = (time: string): void => {
   if (isValidWakeTime(time)) {
-    const [hours, minutes] = time.split(':')
-    settingsState.value.wakeTime = `${hours.padStart(2, '0')}:${minutes}`
+    settingsState.value.wakeTime = normalizeWakeTime(time)
   }
 }
 
@@ -74,6 +92,7 @@ const exportSettings = (): string => {
 const importSettings = (settingsJson: string): boolean => {
   const parsed = parseSettingsJson(settingsJson)
   if (!parsed) {
+    console.warn('RiseLight: failed to import settings; input was not valid.')
     return false
   }
 
@@ -84,8 +103,7 @@ const importSettings = (settingsJson: string): boolean => {
 const settingsApi = {
   settings: sharedSettings,
   isSettingsOpen,
-  wakeTimeHour,
-  wakeTimeMinute,
+  saveFailed: readonly(saveFailed),
   loadSettings,
   saveSettings,
   updateWakeTime,
