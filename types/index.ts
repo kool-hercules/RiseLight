@@ -1,21 +1,28 @@
-export type LightColor = 'white' | 'blue' | 'pink'
+export type LightColor = string
 
-export type LightState = 'inactive' | 'night' | 'wake' | 'awake'
+export type LightMode = 'night' | 'wake' | 'awake'
+
+export type LightState = 'inactive' | LightMode
 
 export type Settings = {
   wakeTime: string // HH:MM format
   wakeDuration: number // minutes
+  chimeEnabled: boolean // play a gentle chime when it becomes okay to get up
   brightness: {
-    white: number
-    blue: number
-    pink: number
+    night: number
+    wake: number
+    awake: number
   }
-  soundEnabled: boolean
+  colors: {
+    night: string
+    wake: string
+    awake: string
+  }
 }
 
 export type TimerInfo = {
   currentTime: Date
-  nextWakeTime: Date
+  nextWakeTime: Date | null
   timeRemaining: number // milliseconds
   currentState: LightState
   currentColor: LightColor
@@ -26,5 +33,5 @@ export type NightLightStore = {
   settings: Settings
   timerInfo: TimerInfo
   isSettingsOpen: boolean
-  isPreviewMode: boolean
-} 
+  previewMode: LightMode | null
+}

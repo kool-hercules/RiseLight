@@ -6,31 +6,44 @@
   html {
     @apply h-full;
   }
-  
+
   body {
     @apply h-full bg-black text-white overflow-hidden;
+  }
+
+  /* A single, always-visible keyboard focus ring. Pointer interaction never
+     shows it (:focus-visible), so it aids keyboard/VoiceOver users without
+     cluttering touch use. */
+  :focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
 @layer components {
   .night-light {
-    @apply w-full h-full transition-all duration-1000 ease-in-out;
+    @apply relative overflow-hidden;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* The glow lives on its own layer so its opacity (down to 0 when the light is
+     off or brightness is 0) never hides the controls, which sit above it. */
+  .light-layer {
+    @apply absolute inset-0 transition-all duration-1000 ease-in-out;
     background: radial-gradient(circle at center, var(--light-color) 0%, transparent 70%);
     opacity: var(--light-opacity);
+    pointer-events: none;
   }
-  
-  .night-light-white {
-    --light-color: #ffffff;
+
+  @media (prefers-reduced-motion: reduce) {
+    .light-layer {
+      transition: none;
+    }
   }
-  
-  .night-light-blue {
-    --light-color: #3b82f6;
-  }
-  
-  .night-light-pink {
-    --light-color: #ec4899;
-  }
-  
+
   .settings-panel {
     @apply bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-xl p-6 shadow-2xl;
   }
@@ -57,18 +70,6 @@
   
   .status-indicator {
     @apply inline-block w-3 h-3 rounded-full mr-2;
-  }
-  
-  .status-white {
-    @apply bg-white;
-  }
-  
-  .status-blue {
-    @apply bg-blue-500;
-  }
-  
-  .status-pink {
-    @apply bg-pink-500;
   }
   
   .settings-button-container {

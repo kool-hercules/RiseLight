@@ -1,146 +1,134 @@
-import { ref, computed, watch, readonly } from 'vue'
+import { readonly, ref, watch } from 'vue'
 import type { Settings } from '../types'
+import {
+  createDefaultSettings,
+  getBrowserStorage,
+  isValidBrightness,
+  isValidColor,
+  isValidDuration,
+  isValidWakeTime,
+  loadSettingsFromStorage,
+  normalizeWakeTime,
+  parseSettingsJson,
+  saveSettingsToStorage,
+  serializeSettings
+} from '../utils/settings'
 
-const defaultSettings: Settings = {
-  wakeTime: '06:30',
-  wakeDuration: 30,
-  brightness: {
-    white: 80,
-    blue: 70,
-    pink: 60
-  },
-  soundEnabled: false
-}
+// RiseLight is client-only, so a module singleton is the smallest shared store.
+// Every consumer receives this same ref and mutations stay behind this API.
+const settingsState = ref<Settings>(createDefaultSettings())
+const isSettingsOpen = ref(false)
+const sharedSettings = readonly(settingsState)
+// True when storage exists but the last write was rejected (private mode / full
+// quota) so the UI can warn that customizations may not survive a reload.
+const saveFailed = ref(false)
+let hasInitialized = false
+let saveTimer: ReturnType<typeof setTimeout> | null = null
 
-export const useSettings = () => {
-  const settings = ref<Settings>({ ...defaultSettings })
-  const isSettingsOpen = ref(false)
-  
-  // Initialize settings from localStorage
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('nightlight-settings')
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        settings.value = { ...defaultSettings, ...parsed }
-      } catch (error) {
-        console.warn('Failed to parse stored settings:', error)
-      }
-    }
-  }
-
-  // Load settings from localStorage on initialization
-  const loadSettings = () => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('nightlight-settings')
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored)
-          settings.value = { ...defaultSettings, ...parsed }
-        } catch (error) {
-          console.warn('Failed to parse stored settings:', error)
-        }
-      }
-    }
-  }
-
-  // Save settings to localStorage
-  const saveSettings = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('nightlight-settings', JSON.stringify(settings.value))
-    }
-  }
-
-  // Watch for changes and auto-save
-  watch(settings, saveSettings, { deep: true })
-
-  // Computed properties for easier access
-  const wakeTimeHour = computed(() => {
-    const [hour] = settings.value.wakeTime.split(':')
-    return parseInt(hour)
-  })
-
-  const wakeTimeMinute = computed(() => {
-    const [, minute] = settings.value.wakeTime.split(':')
-    return parseInt(minute)
-  })
-
-  // Validation functions
-  const isValidWakeTime = (time: string): boolean => {
-    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/
-    return timeRegex.test(time)
-  }
-
-  const isValidDuration = (duration: number): boolean => {
-    return duration >= 1 && duration <= 60
-  }
-
-  const isValidBrightness = (brightness: number): boolean => {
-    return brightness >= 0 && brightness <= 100
-  }
-
-  // Update functions
-  const updateWakeTime = (time: string) => {
-    if (isValidWakeTime(time)) {
-      settings.value.wakeTime = time
-    }
-  }
-
-  const updateWakeDuration = (duration: number) => {
-    if (isValidDuration(duration)) {
-      settings.value.wakeDuration = duration
-    }
-  }
-
-  const updateBrightness = (color: keyof Settings['brightness'], value: number) => {
-    if (isValidBrightness(value)) {
-      settings.value.brightness[color] = value
-    }
-  }
-
-  const toggleSettings = () => {
-    isSettingsOpen.value = !isSettingsOpen.value
-  }
-
-  const resetSettings = () => {
-    settings.value = { ...defaultSettings }
-  }
-
-  // Export settings for backup
-  const exportSettings = (): string => {
-    return JSON.stringify(settings.value, null, 2)
-  }
-
-  // Import settings from backup
-  const importSettings = (settingsJson: string): boolean => {
-    try {
-      const parsed = JSON.parse(settingsJson)
-      if (parsed && typeof parsed === 'object') {
-        settings.value = { ...defaultSettings, ...parsed }
-        return true
-      }
-    } catch (error) {
-      console.error('Failed to import settings:', error)
-    }
+const saveSettings = (): boolean => {
+  const storage = getBrowserStorage()
+  if (!storage) {
     return false
   }
 
-  return {
-    settings: readonly(settings),
-    isSettingsOpen,
-    wakeTimeHour,
-    wakeTimeMinute,
-    loadSettings,
-    saveSettings,
-    updateWakeTime,
-    updateWakeDuration,
-    updateBrightness,
-    toggleSettings,
-    resetSettings,
-    exportSettings,
-    importSettings,
-    isValidWakeTime,
-    isValidDuration,
-    isValidBrightness
+  const ok = saveSettingsToStorage(storage, settingsState.value)
+  saveFailed.value = !ok
+  return ok
+}
+
+// Slider drags emit a burst of mutations; debounce so we serialize and hit
+// localStorage once the value settles instead of on every intermediate step.
+const scheduleSave = (): void => {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
   }
-} 
+
+  saveTimer = setTimeout(saveSettings, 150)
+}
+
+const loadSettings = (): void => {
+  settingsState.value = loadSettingsFromStorage(getBrowserStorage())
+  hasInitialized = true
+}
+
+watch(settingsState, scheduleSave, { deep: true })
+
+const updateWakeTime = (time: string): void => {
+  if (isValidWakeTime(time)) {
+    settingsState.value.wakeTime = normalizeWakeTime(time)
+  }
+}
+
+const updateWakeDuration = (duration: number): void => {
+  if (isValidDuration(duration)) {
+    settingsState.value.wakeDuration = duration
+  }
+}
+
+const updateBrightness = (mode: keyof Settings['brightness'], value: number): void => {
+  if (isValidBrightness(value)) {
+    settingsState.value.brightness[mode] = value
+  }
+}
+
+const updateColor = (mode: keyof Settings['colors'], color: string): void => {
+  if (isValidColor(color)) {
+    settingsState.value.colors[mode] = color
+  }
+}
+
+const updateChimeEnabled = (enabled: boolean): void => {
+  settingsState.value.chimeEnabled = Boolean(enabled)
+}
+
+const toggleSettings = (): void => {
+  isSettingsOpen.value = !isSettingsOpen.value
+}
+
+const resetSettings = (): void => {
+  settingsState.value = createDefaultSettings()
+}
+
+const exportSettings = (): string => {
+  return serializeSettings(settingsState.value, 2)
+}
+
+const importSettings = (settingsJson: string): boolean => {
+  const parsed = parseSettingsJson(settingsJson)
+  if (!parsed) {
+    console.warn('RiseLight: failed to import settings; input was not valid.')
+    return false
+  }
+
+  settingsState.value = parsed
+  return true
+}
+
+const settingsApi = {
+  settings: sharedSettings,
+  isSettingsOpen,
+  saveFailed: readonly(saveFailed),
+  loadSettings,
+  saveSettings,
+  updateWakeTime,
+  updateWakeDuration,
+  updateBrightness,
+  updateColor,
+  updateChimeEnabled,
+  toggleSettings,
+  resetSettings,
+  exportSettings,
+  importSettings,
+  isValidWakeTime,
+  isValidDuration,
+  isValidBrightness,
+  isValidColor
+}
+
+export const useSettings = () => {
+  if (!hasInitialized && typeof window !== 'undefined') {
+    loadSettings()
+  }
+
+  return settingsApi
+}

@@ -7,15 +7,18 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "test": "vitest run",
+    "typecheck": "nuxt typecheck"
   },
   "devDependencies": {
-    "@nuxt/devtools": "latest",
+    "@nuxt/devtools": "^4.0.0-alpha.7",
     "@nuxtjs/tailwindcss": "^6.8.4",
     "@pinia/nuxt": "^0.5.1",
     "@types/node": "^20.5.1",
     "nuxt": "^3.7.4",
     "typescript": "^5.1.6",
+    "vitest": "^3.2.4",
     "vue-tsc": "^2.2.12"
   },
   "dependencies": {
