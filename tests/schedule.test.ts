@@ -9,13 +9,25 @@ describe('calculateNextWakeTime', () => {
   it('calculates an overnight wake time on the next local day', () => {
     const now = localDate(15, 22, 0)
 
-    expect(calculateNextWakeTime(now, '06:30')).toEqual(localDate(16, 6, 30))
+    expect(calculateNextWakeTime(now, '06:30', 30)).toEqual(localDate(16, 6, 30))
   })
 
   it('uses the current instant when it is exactly the configured wake minute', () => {
     const now = localDate(15, 6, 30)
 
-    expect(calculateNextWakeTime(now, '06:30')).toEqual(now)
+    expect(calculateNextWakeTime(now, '06:30', 30)).toEqual(now)
+  })
+
+  it('keeps today\'s anchor when started inside the wake window', () => {
+    const now = localDate(15, 6, 45)
+
+    expect(calculateNextWakeTime(now, '06:30', 30)).toEqual(localDate(15, 6, 30))
+  })
+
+  it('rolls to tomorrow once today\'s wake window has fully elapsed', () => {
+    const now = localDate(15, 7, 0)
+
+    expect(calculateNextWakeTime(now, '06:30', 30)).toEqual(localDate(16, 6, 30))
   })
 })
 

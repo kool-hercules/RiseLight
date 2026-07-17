@@ -40,6 +40,13 @@ export const createNightLightRuntime = (
   const previewMode = ref<LightMode | null>(null)
   let clockInterval: IntervalHandle | null = null
 
+  const resetToInactive = (): void => {
+    isActive.value = false
+    currentState.value = 'inactive'
+    nextWakeTime.value = null
+    timeRemaining.value = 0
+  }
+
   const updateLightState = (at: Date = now()): void => {
     currentTime.value = new Date(at.getTime())
 
@@ -79,7 +86,11 @@ export const createNightLightRuntime = (
   const startNightLight = (): void => {
     const startedAt = now()
     currentTime.value = new Date(startedAt.getTime())
-    nextWakeTime.value = calculateNextWakeTime(startedAt, settings.value.wakeTime)
+    nextWakeTime.value = calculateNextWakeTime(
+      startedAt,
+      settings.value.wakeTime,
+      settings.value.wakeDuration
+    )
     isActive.value = true
     updateLightState(startedAt)
     saveActiveSession(storage, nextWakeTime.value)
@@ -87,10 +98,7 @@ export const createNightLightRuntime = (
   }
 
   const stopNightLight = (): void => {
-    isActive.value = false
-    currentState.value = 'inactive'
-    nextWakeTime.value = null
-    timeRemaining.value = 0
+    resetToInactive()
     clearActiveSession(storage)
   }
 
@@ -116,10 +124,7 @@ export const createNightLightRuntime = (
     currentTime.value = new Date(restoredAt.getTime())
 
     if (!restoredWakeTime) {
-      isActive.value = false
-      currentState.value = 'inactive'
-      nextWakeTime.value = null
-      timeRemaining.value = 0
+      resetToInactive()
       return false
     }
 
@@ -138,7 +143,11 @@ export const createNightLightRuntime = (
 
       const changedAt = now()
       if (wakeTime !== previousWakeTime || !nextWakeTime.value) {
-        nextWakeTime.value = calculateNextWakeTime(changedAt, wakeTime)
+        nextWakeTime.value = calculateNextWakeTime(
+          changedAt,
+          wakeTime,
+          settings.value.wakeDuration
+        )
         saveActiveSession(storage, nextWakeTime.value)
       }
 

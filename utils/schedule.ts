@@ -6,7 +6,11 @@ export type ScheduleState = {
   timeRemaining: number
 }
 
-export const calculateNextWakeTime = (now: Date, wakeTime: string): Date => {
+export const calculateNextWakeTime = (
+  now: Date,
+  wakeTime: string,
+  wakeDurationMinutes = 0
+): Date => {
   if (!isValidWakeTime(wakeTime)) {
     throw new RangeError(`Invalid wake time: ${wakeTime}`)
   }
@@ -15,8 +19,13 @@ export const calculateNextWakeTime = (now: Date, wakeTime: string): Date => {
   const nextWakeTime = new Date(now)
   nextWakeTime.setHours(hours, minutes, 0, 0)
 
-  // Exactly at the configured minute is the start of the wake window.
-  if (nextWakeTime.getTime() < now.getTime()) {
+  // Anchor to today whenever the current instant is still inside today's wake
+  // window (from the configured minute through wakeDuration). Only once today's
+  // window has fully elapsed do we roll the anchor forward to tomorrow, so a
+  // light started or edited mid-window shows "wake" instead of skipping to
+  // "night" for the next ~24 hours.
+  const windowEnd = nextWakeTime.getTime() + wakeDurationMinutes * 60 * 1000
+  if (windowEnd <= now.getTime()) {
     nextWakeTime.setDate(nextWakeTime.getDate() + 1)
   }
 
