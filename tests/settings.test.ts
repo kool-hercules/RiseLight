@@ -63,8 +63,7 @@ describe('settings persistence', () => {
         night: '#112233',
         wake: '#ff9500',
         awake: '#34c759'
-      },
-      soundEnabled: false
+      }
     })
   })
 
@@ -92,7 +91,6 @@ describe('settings persistence', () => {
     expect(settings.wakeDuration).toBe(30)
     expect(settings.brightness).toEqual({ night: 20, wake: 35, awake: 65 })
     expect(settings.colors).toEqual({ night: '#abcdef', wake: '#ff9500', awake: '#123456' })
-    expect(settings.soundEnabled).toBe(true)
   })
 
   it('migrates legacy white/blue/pink brightness without losing zero', () => {
@@ -121,8 +119,7 @@ describe('settings persistence', () => {
         night: '#ffffff',
         wake: '#3b82f6',
         awake: '#ec4899'
-      },
-      soundEnabled: true
+      }
     })
   })
 })

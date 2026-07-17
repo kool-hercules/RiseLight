@@ -46,8 +46,7 @@ export const createDefaultSettings = (): Settings => ({
     night: '#ff3b30',
     wake: '#ff9500',
     awake: '#34c759'
-  },
-  soundEnabled: false
+  }
 })
 
 const isRecord = (value: unknown): value is UnknownRecord => {
@@ -140,10 +139,7 @@ export const parseSettings = (stored: unknown): Settings => {
       : defaults.wakeTime,
     wakeDuration: Math.round(wakeDuration),
     brightness,
-    colors,
-    soundEnabled: typeof source.soundEnabled === 'boolean'
-      ? source.soundEnabled
-      : defaults.soundEnabled
+    colors
   }
 }
 

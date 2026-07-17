@@ -17,7 +17,6 @@ export type Settings = {
     wake: string
     awake: string
   }
-  soundEnabled: boolean
 }
 
 export type TimerInfo = {
