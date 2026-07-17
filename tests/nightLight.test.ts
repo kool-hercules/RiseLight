@@ -120,6 +120,41 @@ describe('active settings updates', () => {
   })
 })
 
+describe('human schedule labels', () => {
+  it('derives almost-time and okay-to-get-up labels from settings even while off', () => {
+    const { runtime, settings } = createRuntime(localDate(22, 0))
+    settings.value.wakeTime = '06:30'
+    settings.value.wakeDuration = 30
+
+    // Available without turning the light on, so "tonight's plan" can show them.
+    expect(runtime.isActive.value).toBe(false)
+    expect(runtime.almostTimeLabel.value).toMatch(/6:30\s?AM/i)
+    expect(runtime.okayTimeLabel.value).toMatch(/7:00\s?AM/i)
+    runtime.dispose()
+  })
+
+  it('rolls the okay-to-get-up label past the hour when the window crosses it', () => {
+    const { runtime, settings } = createRuntime(localDate(22, 0))
+    settings.value.wakeTime = '06:45'
+    settings.value.wakeDuration = 30
+    expect(runtime.okayTimeLabel.value).toMatch(/7:15\s?AM/i)
+    runtime.dispose()
+  })
+
+  it('speaks the wake-window countdown in calm language', () => {
+    const { clock, runtime, settings } = createRuntime(localDate(6, 30))
+    settings.value.wakeTime = '06:30'
+    settings.value.wakeDuration = 30
+    runtime.startNightLight()
+
+    clock.set(localDate(6, 45))
+    runtime.refresh()
+    expect(runtime.currentState.value).toBe('wake')
+    expect(runtime.humanTimeRemaining.value).toBe('in about 15 minutes')
+    runtime.dispose()
+  })
+})
+
 describe('sunrise ramp (display color/brightness)', () => {
   it('shows the exact night color/brightness at the window start with no seam', () => {
     const { runtime, settings } = createRuntime(localDate(5, 0))

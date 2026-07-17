@@ -23,12 +23,37 @@
           <div class="text-3xl font-semibold mb-1">{{ headline }}</div>
           <div class="text-sm text-white/80 mb-8 min-h-[1.25rem]">{{ detail }}</div>
         </div>
+
+        <!-- The dock owns exit during a preview, so the toggle only shows in the
+             real on/off flow — never contradicting a preview. -->
         <button
+          v-if="!previewMode"
           @click.stop="$emit('toggle-nightlight')"
           class="control-button text-xl min-w-[140px]"
         >
           {{ isActive ? 'Turn Off' : 'Turn On' }}
         </button>
+
+        <!-- Tonight's plan: a quiet, at-a-glance reminder of the three phases so
+             the model is reinforced every time before the light is turned on. -->
+        <div
+          v-if="!isActive && !previewMode"
+          class="plan legible mt-10 mx-auto max-w-[16rem] text-left"
+        >
+          <p class="text-xs uppercase tracking-wide text-white/50 mb-3 text-center">Tonight’s plan</p>
+          <ul class="space-y-2.5">
+            <li v-for="phase in plan" :key="phase.key" class="flex items-center gap-3">
+              <span
+                class="shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
+                :style="{ backgroundColor: phase.color }"
+              >
+                <ModeIcon :name="phase.icon" class="w-4 h-4 text-black/70" />
+              </span>
+              <span class="flex-1 text-sm text-white/85">{{ phase.label }}</span>
+              <span class="text-xs text-white/60 tabular-nums">{{ phase.time }}</span>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
 
@@ -50,17 +75,27 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { LightColor, LightState } from '../types'
-import { stateHeadline, stateIcon } from '../utils/modes'
+import type { LightColor, LightMode, LightState } from '../types'
+import { MODE_PRESENTATION, type ModeIconName, stateHeadline, stateIcon } from '../utils/modes'
 import ModeIcon from './ModeIcon.vue'
+
+interface PlanPhase {
+  key: LightMode
+  label: string
+  time: string
+  color: string
+  icon: ModeIconName
+}
 
 interface Props {
   currentColor: LightColor
   brightness: number
   isActive: boolean
   currentState: LightState
-  formatTimeRemaining: string
-  formatOkayToRise: string
+  previewMode: LightMode | null
+  humanTimeRemaining: string
+  okayToRiseLabel: string
+  plan: PlanPhase[]
   currentTime: Date
 }
 
@@ -94,22 +129,38 @@ const chromeStyle = computed(() => ({
   transition: 'opacity 0.8s ease'
 }))
 
-const displayIcon = computed(() => (props.isActive ? stateIcon(props.currentState) : 'power'))
+const displayIcon = computed(() => {
+  if (props.previewMode) {
+    return MODE_PRESENTATION[props.previewMode].icon
+  }
+  return props.isActive ? stateIcon(props.currentState) : 'power'
+})
 
-const headline = computed(() => (props.isActive ? stateHeadline(props.currentState) : 'Sleep light'))
+const headline = computed(() => {
+  if (props.previewMode) {
+    return MODE_PRESENTATION[props.previewMode].label
+  }
+  return props.isActive ? stateHeadline(props.currentState) : 'Sleep light'
+})
 
 const detail = computed(() => {
+  // During a preview the screen fills with the previewed color; say exactly that
+  // rather than showing the real schedule state, which would contradict it.
+  if (props.previewMode) {
+    return 'Preview'
+  }
+
   if (!props.isActive) {
     return 'Tap Turn On to start tonight’s light.'
   }
 
   switch (props.currentState) {
     case 'night':
-      return props.formatOkayToRise
-        ? `Okay to get up at ${props.formatOkayToRise}`
+      return props.okayToRiseLabel
+        ? `Okay to get up at ${props.okayToRiseLabel}`
         : 'Rest until morning.'
     case 'wake':
-      return `Okay to get up in ${props.formatTimeRemaining}`
+      return `Okay to get up ${props.humanTimeRemaining}`
     case 'awake':
       return 'Good morning!'
     default:

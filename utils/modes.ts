@@ -18,7 +18,7 @@ export const MODE_PRESENTATION: Record<LightMode, ModePresentation> = {
   night: {
     label: 'Stay in bed',
     blurb: 'A calm light through the night.',
-    settingHelp: 'Shows from bedtime until the wake-up window begins.',
+    settingHelp: 'Shows through the night until the wake-up window begins.',
     icon: 'moon'
   },
   wake: {

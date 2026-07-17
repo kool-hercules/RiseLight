@@ -11,6 +11,7 @@ import type { LightColor, LightMode, LightState, Settings, TimerInfo } from '../
 import { MODE_PRESENTATION } from '../utils/modes'
 import { createDevClock } from '../utils/devClock'
 import { rampBrightness, rampColor } from '../utils/ramp'
+import { formatClockTime, humanizeCountdown } from '../utils/time'
 import { calculateNextWakeTime, calculateScheduleState } from '../utils/schedule'
 import { clearActiveSession, readActiveSession, saveActiveSession } from '../utils/session'
 import { getBrowserStorage, type StorageLike } from '../utils/settings'
@@ -233,32 +234,33 @@ export const createNightLightRuntime = (
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   })
 
+  // Calm, spoken-language countdown for the wake window ("in about 15 minutes").
+  const humanTimeRemaining = computed(() => humanizeCountdown(timeRemaining.value))
+
   const formatNextWakeTime = computed(() => {
     if (!isActive.value || !nextWakeTime.value) {
       return ''
     }
 
-    return nextWakeTime.value.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })
+    return formatClockTime(nextWakeTime.value)
   })
 
-  // The moment the light reaches the "okay to get up" state: the end of the
-  // wake-up window (wake start + duration).
-  const formatOkayToRiseTime = computed(() => {
-    if (!isActive.value || !nextWakeTime.value) {
-      return ''
-    }
+  // The two schedule anchors, derived from settings so they are available even
+  // when the light is off (for "tonight's plan"): when "almost time" starts
+  // (the configured wake time) and when it becomes "okay to get up" (that time
+  // plus the wake-up window). Uses the runtime clock so a dev/QA clock is honored.
+  const scheduleAnchor = (extraMinutes: number): Date => {
+    const [hours, minutes] = settings.value.wakeTime.split(':').map(Number)
+    const at = new Date(now().getTime())
+    at.setHours(hours, minutes + extraMinutes, 0, 0)
+    return at
+  }
 
-    const okayAt = new Date(nextWakeTime.value.getTime() + settings.value.wakeDuration * 60 * 1000)
-    return okayAt.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })
-  })
+  const almostTimeLabel = computed(() => formatClockTime(scheduleAnchor(0)))
+  const okayTimeLabel = computed(() => formatClockTime(scheduleAnchor(settings.value.wakeDuration)))
+
+  // Retained for compatibility; equals okayTimeLabel while active.
+  const formatOkayToRiseTime = computed(() => (isActive.value ? okayTimeLabel.value : ''))
 
   const statusMessage = computed(() => {
     if (previewMode.value) {
@@ -271,9 +273,9 @@ export const createNightLightRuntime = (
 
     switch (currentState.value) {
       case 'night':
-        return `Stay in bed — okay to get up at ${formatOkayToRiseTime.value}`
+        return `Stay in bed — okay to get up at ${okayTimeLabel.value}`
       case 'wake':
-        return `Almost time — okay to get up in ${formatTimeRemaining.value}`
+        return `Almost time — okay to get up ${humanTimeRemaining.value}`
       case 'awake':
         return 'Okay to get up — good morning!'
       default:
@@ -309,6 +311,9 @@ export const createNightLightRuntime = (
     isPreviewMode,
     timerInfo,
     formatTimeRemaining,
+    humanTimeRemaining,
+    almostTimeLabel,
+    okayTimeLabel,
     getCurrentBrightness,
     formatNextWakeTime,
     formatOkayToRiseTime,

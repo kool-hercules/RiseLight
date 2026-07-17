@@ -5,8 +5,10 @@
       :brightness="displayBrightness"
       :is-active="isActive"
       :current-state="currentState"
-      :format-time-remaining="formatTimeRemaining"
-      :format-okay-to-rise="formatOkayToRiseTime"
+      :preview-mode="previewMode"
+      :human-time-remaining="humanTimeRemaining"
+      :okay-to-rise-label="okayTimeLabel"
+      :plan="plan"
       :current-time="currentTime"
       @toggle-nightlight="handleToggleNightLight"
       @toggle-settings="toggleSettings"
@@ -45,6 +47,7 @@ import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'
 import { useWakeLock } from '../composables/useWakeLock'
 import { useChime } from '../composables/useChime'
+import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
 
 const {
   settings,
@@ -66,13 +69,25 @@ const {
   displayBrightness,
   currentState,
   previewMode,
-  formatTimeRemaining,
-  formatOkayToRiseTime,
-  getCurrentBrightness,
+  humanTimeRemaining,
+  almostTimeLabel,
+  okayTimeLabel,
   toggleNightLight,
   startPreview,
   stopPreview
 } = useNightLight(settings)
+
+// "Tonight's plan": the three phases with their times, reactive to settings, so
+// the mental model is reinforced on the home screen before the light is on.
+const plan = computed(() =>
+  MODE_ORDER.map(key => ({
+    key,
+    label: MODE_PRESENTATION[key].label,
+    icon: MODE_PRESENTATION[key].icon,
+    color: settings.value.colors[key],
+    time: key === 'night' ? 'Now' : key === 'wake' ? almostTimeLabel.value : okayTimeLabel.value
+  }))
+)
 
 const { showOnboarding, completeOnboarding, restartOnboarding } = useOnboarding()
 
