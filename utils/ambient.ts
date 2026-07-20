@@ -223,6 +223,16 @@ interface LfoConfig {
   depth: number
 }
 
+// One noise stream in a layered nature sound: e.g. a bright modulated top over a
+// low steady bed. Layering reads far more like real rain/ocean than a single
+// filtered noise stream.
+interface Layer {
+  noise: NoiseKind
+  gain: number
+  filter?: FilterConfig
+  lfo?: LfoConfig
+}
+
 const NOISE_SECONDS = 6
 const HEARTBEAT_SECONDS = 1.05
 
@@ -289,13 +299,13 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
     return buffer
   }
 
+  // A single looping buffer at a fixed gain — used for the flat noise family and
+  // the pre-rendered heartbeat. Filtered/modulated sounds use startLayeredVoice.
   const startBufferVoice = (
     ctx: AmbientAudioContext,
     master: GainNode,
     buffer: AudioBuffer,
-    baseGain: number,
-    filter?: FilterConfig,
-    lfo?: LfoConfig
+    baseGain: number
   ): Voice => {
     const source = ctx.createBufferSource()
     source.buffer = buffer
@@ -303,43 +313,77 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
 
     const gain = ctx.createGain()
     gain.gain.setValueAtTime(baseGain, ctx.currentTime)
-
-    const sources: Array<AudioBufferSourceNode | OscillatorNode> = [source]
-
-    if (filter) {
-      const node = ctx.createBiquadFilter()
-      node.type = filter.type
-      node.frequency.setValueAtTime(filter.frequency, ctx.currentTime)
-      if (typeof filter.Q === 'number') {
-        node.Q.setValueAtTime(filter.Q, ctx.currentTime)
-      }
-      source.connect(node)
-      node.connect(gain)
-
-      if (lfo) {
-        const osc = ctx.createOscillator()
-        osc.type = 'sine'
-        osc.frequency.setValueAtTime(lfo.rate, ctx.currentTime)
-        const lfoGain = ctx.createGain()
-        lfoGain.gain.setValueAtTime(lfo.depth, ctx.currentTime)
-        osc.connect(lfoGain)
-        lfoGain.connect(lfo.target === 'frequency' ? node.frequency : gain.gain)
-        osc.start()
-        sources.push(osc)
-      }
-    } else {
-      source.connect(gain)
-    }
-
+    source.connect(gain)
     gain.connect(master)
     source.start()
 
-    return { gain, sources, baseGain }
+    return { gain, sources: [source], baseGain }
+  }
+
+  // Build a nature sound from several noise layers into one shared voice gain
+  // (the fade/declick handle). Each layer is an independent noise stream, so
+  // their peaks rarely align and the sum stays clear of clipping.
+  const startLayeredVoice = (
+    ctx: AmbientAudioContext,
+    master: GainNode,
+    layers: Layer[]
+  ): Voice => {
+    const voiceGain = ctx.createGain()
+    voiceGain.gain.setValueAtTime(1, ctx.currentTime)
+    voiceGain.connect(master)
+
+    const sources: Array<AudioBufferSourceNode | OscillatorNode> = []
+
+    for (const layer of layers) {
+      const source = ctx.createBufferSource()
+      source.buffer = noiseBuffer(ctx, layer.noise)
+      source.loop = true
+
+      const layerGain = ctx.createGain()
+      layerGain.gain.setValueAtTime(layer.gain, ctx.currentTime)
+
+      let head: AudioNode = source
+      let modTarget: AudioParam = layerGain.gain
+
+      if (layer.filter) {
+        const node = ctx.createBiquadFilter()
+        node.type = layer.filter.type
+        node.frequency.setValueAtTime(layer.filter.frequency, ctx.currentTime)
+        if (typeof layer.filter.Q === 'number') {
+          node.Q.setValueAtTime(layer.filter.Q, ctx.currentTime)
+        }
+        source.connect(node)
+        head = node
+        if (layer.lfo?.target === 'frequency') {
+          modTarget = node.frequency
+        }
+      }
+
+      head.connect(layerGain)
+      layerGain.connect(voiceGain)
+
+      if (layer.lfo) {
+        const osc = ctx.createOscillator()
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(layer.lfo.rate, ctx.currentTime)
+        const lfoGain = ctx.createGain()
+        lfoGain.gain.setValueAtTime(layer.lfo.depth, ctx.currentTime)
+        osc.connect(lfoGain)
+        lfoGain.connect(modTarget)
+        osc.start()
+        sources.push(osc)
+      }
+
+      source.start()
+      sources.push(source)
+    }
+
+    return { gain: voiceGain, sources, baseGain: 1 }
   }
 
   // Synthesized approximation for every sound, so there is always an offline
-  // fallback. Nature sounds are filtered/modulated noise; the noise family is
-  // flat; heartbeat is a pre-rendered buffer.
+  // fallback. The noise family is flat; nature sounds layer a low bed under a
+  // filtered/modulated top; heartbeat is a pre-rendered buffer.
   const buildSynthVoice = (
     ctx: AmbientAudioContext,
     master: GainNode,
@@ -351,28 +395,29 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
       case 'brown':
         return startBufferVoice(ctx, master, noiseBuffer(ctx, id), 0.6)
       case 'rain':
-        return startBufferVoice(ctx, master, noiseBuffer(ctx, 'pink'), 0.7, {
-          type: 'highpass',
-          frequency: 1200
-        }, { target: 'gain', rate: 0.7, depth: 0.12 })
+        // Bright shimmering hiss over a low patter bed.
+        return startLayeredVoice(ctx, master, [
+          { noise: 'pink', gain: 0.4, filter: { type: 'highpass', frequency: 1800 }, lfo: { target: 'gain', rate: 0.9, depth: 0.08 } },
+          { noise: 'brown', gain: 0.28, filter: { type: 'lowpass', frequency: 450 } }
+        ])
       case 'ocean':
-        return startBufferVoice(ctx, master, noiseBuffer(ctx, 'brown'), 0.65, {
-          type: 'lowpass',
-          frequency: 550,
-          Q: 0.7
-        }, { target: 'gain', rate: 0.1, depth: 0.35 })
-      case 'fan':
-        return startBufferVoice(ctx, master, noiseBuffer(ctx, 'pink'), 0.55, {
-          type: 'bandpass',
-          frequency: 520,
-          Q: 1.2
-        })
+        // A slow swell washing in and out, over a deep steady bed.
+        return startLayeredVoice(ctx, master, [
+          { noise: 'brown', gain: 0.5, filter: { type: 'lowpass', frequency: 500, Q: 0.8 }, lfo: { target: 'gain', rate: 0.09, depth: 0.4 } },
+          { noise: 'brown', gain: 0.22, filter: { type: 'lowpass', frequency: 200 } }
+        ])
       case 'wind':
-        return startBufferVoice(ctx, master, noiseBuffer(ctx, 'pink'), 0.5, {
-          type: 'bandpass',
-          frequency: 480,
-          Q: 0.9
-        }, { target: 'frequency', rate: 0.15, depth: 260 })
+        // Gusting band-passed noise over a low howl.
+        return startLayeredVoice(ctx, master, [
+          { noise: 'pink', gain: 0.42, filter: { type: 'bandpass', frequency: 480, Q: 0.9 }, lfo: { target: 'frequency', rate: 0.13, depth: 320 } },
+          { noise: 'brown', gain: 0.2, filter: { type: 'lowpass', frequency: 300 } }
+        ])
+      case 'fan':
+        // Steady whir over a low motor hum.
+        return startLayeredVoice(ctx, master, [
+          { noise: 'pink', gain: 0.5, filter: { type: 'bandpass', frequency: 500, Q: 1.4 } },
+          { noise: 'brown', gain: 0.24, filter: { type: 'lowpass', frequency: 180 } }
+        ])
       case 'heartbeat': {
         const length = Math.max(1, Math.floor(ctx.sampleRate * HEARTBEAT_SECONDS))
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate)
