@@ -55,6 +55,7 @@ import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'
 import { useWakeLock } from '../composables/useWakeLock'
+import { useKeepAwake } from '../composables/useKeepAwake'
 import { useChime } from '../composables/useChime'
 import { useAmbient } from '../composables/useAmbient'
 import { useWakeAlarm } from '../composables/useWakeAlarm'
@@ -104,8 +105,10 @@ const plan = computed(() =>
 const { showOnboarding, completeOnboarding, restartOnboarding } = useOnboarding()
 
 // Keep the screen awake while the light is on — a night light that sleeps is
-// useless.
+// useless. useWakeLock covers the web; useKeepAwake is its native counterpart
+// (no-op on web).
 useWakeLock(isActive)
+useKeepAwake(isActive)
 
 // Native-only: fire an "okay to get up" local notification at the wake
 // transition even if the app is closed/backgrounded. No-op on the web PWA.

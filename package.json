@@ -27,6 +27,7 @@
     "vue-tsc": "^2.2.12"
   },
   "dependencies": {
+    "@capacitor-community/keep-awake": "^5.0.1",
     "@capacitor/android": "^6.2.1",
     "@capacitor/core": "^6.2.1",
     "@capacitor/ios": "^6.2.1",

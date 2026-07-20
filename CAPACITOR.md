@@ -64,10 +64,17 @@ and cancels when the light is turned off. On the web PWA it's a **silent no-op**
   fully close the app, and confirm the notification fires. (Timing is exact via
   the OS scheduler — it does not depend on the app running.)
 
+## Keep-awake (implemented)
+
+`@capacitor-community/keep-awake` is wired via `composables/useKeepAwake.ts`:
+it holds the screen on while the light is active in the native shell (the web
+Screen Wake Lock API isn't reliable in a WKWebView; `useWakeLock` still covers
+the web PWA). No-op on web, so the same code runs everywhere. Note: pin
+`@capacitor-community/keep-awake@^5` for Capacitor 6 — its major versions are
+offset (6.x/7.x target Capacitor 7).
+
 ## Next steps (not yet implemented)
 
-- **Keep-awake**: the web `useWakeLock` covers foreground; consider
-  `@capacitor-community/keep-awake` for parity in the native shell.
 - **Store assets**: app icons/splash via `@capacitor/assets`; set version and
   signing in each platform project.
 
