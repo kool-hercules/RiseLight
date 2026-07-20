@@ -32,7 +32,7 @@ const emit = defineEmits<{
   'preview-mode': [mode: LightMode]
   'stop-preview': []
   'reset-settings': []
-  'restart-intro': []
+  'show-help': []
 }>()
 
 const modes = MODE_ORDER.map(key => ({ key, ...MODE_PRESENTATION[key] }))
@@ -397,12 +397,12 @@ const confirmReset = () => {
           </div>
         </div>
 
-        <!-- Replay intro -->
+        <!-- How it works -->
         <button
-          @click="$emit('restart-intro')"
+          @click="$emit('show-help')"
           class="w-full text-sm text-gray-400 hover:text-white transition-colors py-2 mb-4"
         >
-          Show intro again
+          How it works
         </button>
 
         <!-- Reset / Done -->

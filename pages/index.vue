@@ -12,9 +12,11 @@
       :current-time="currentTime"
       :has-sound="settings.ambientSound !== null"
       :is-sound-playing="isSoundPlaying"
+      :show-hint="showFirstRunHint"
       @toggle-nightlight="handleToggleNightLight"
-      @toggle-settings="toggleSettings"
+      @toggle-settings="handleToggleSettings"
       @toggle-sound="handleToggleSound"
+      @toggle-help="toggleHelp"
     />
 
     <SettingsPanel
@@ -37,20 +39,19 @@
       @preview-mode="startPreview"
       @stop-preview="stopPreview"
       @reset-settings="resetSettings"
-      @restart-intro="handleRestartIntro"
+      @show-help="handleShowHelp"
     />
 
-    <OnboardingOverlay
-      v-if="showOnboarding"
+    <HelpPopover
+      v-if="showHelp"
       :settings="settings"
-      @update-wake-time="updateWakeTime"
-      @complete="completeOnboarding"
+      @close="closeHelp"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'
@@ -102,7 +103,40 @@ const plan = computed(() =>
   }))
 )
 
-const { showOnboarding, completeOnboarding, restartOnboarding } = useOnboarding()
+// On-demand help replaces the old full-screen intro. The one-time first-run
+// "hint" reuses the onboarding flag: it shows a subtle nudge on the "?" until
+// the user's first meaningful interaction, then never returns.
+const { showOnboarding: showFirstRunHint, completeOnboarding: dismissFirstRunHint } = useOnboarding()
+const showHelp = ref(false)
+
+const openHelp = () => {
+  dismissFirstRunHint()
+  showHelp.value = true
+}
+const closeHelp = () => {
+  showHelp.value = false
+}
+const toggleHelp = () => {
+  if (showHelp.value) {
+    closeHelp()
+  } else {
+    openHelp()
+  }
+}
+
+// Any of these first interactions retires the first-run hint.
+const handleToggleSettings = () => {
+  dismissFirstRunHint()
+  toggleSettings()
+}
+
+// "How it works" from Settings: close the panel, then show the help popover.
+const handleShowHelp = () => {
+  if (isSettingsOpen.value) {
+    toggleSettings()
+  }
+  openHelp()
+}
 
 // Keep the screen awake while the light is on — a night light that sleeps is
 // useless. useWakeLock covers the web; useKeepAwake is its native counterpart
@@ -128,6 +162,7 @@ const isSoundPlaying = ambient.isPlaying
 // silences the ambient sound too (the device goes dark and quiet together),
 // while keeping the saved sound choice for next time.
 const handleToggleNightLight = () => {
+  dismissFirstRunHint()
   if (!isActive.value) {
     chime.prime()
     ambient.prime()
@@ -170,28 +205,19 @@ const closeSettings = () => {
   }
 }
 
-const handleRestartIntro = () => {
-  restartOnboarding()
-  if (isSettingsOpen.value) {
-    toggleSettings()
-  }
-}
-
 // Keyboard shortcuts
 const handleKeyDown = (event: KeyboardEvent) => {
-  if (showOnboarding.value) {
-    return
-  }
-
   switch (event.key) {
     case ' ':
-      if (!isSettingsOpen.value) {
+      if (!isSettingsOpen.value && !showHelp.value) {
         event.preventDefault()
         handleToggleNightLight()
       }
       break
     case 'Escape':
-      if (isSettingsOpen.value) {
+      if (showHelp.value) {
+        closeHelp()
+      } else if (isSettingsOpen.value) {
         closeSettings()
       }
       break
