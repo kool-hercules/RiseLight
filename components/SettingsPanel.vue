@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import type { LightMode, Settings } from '../types'
+import type { AmbientSoundId, LightMode, Settings } from '../types'
+import { SLEEP_TIMER_OPTIONS } from '../types'
 import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
+import { AMBIENT_SOUNDS } from '../utils/ambient'
 import ModeIcon from './ModeIcon.vue'
+import SoundIcon from './SoundIcon.vue'
 
 interface Props {
   isOpen: boolean
   settings: Settings
   previewMode: LightMode | null
   saveFailed?: boolean
+  activeSoundId?: AmbientSoundId | null
+  isSoundPlaying?: boolean
 }
 
 const props = defineProps<Props>()
@@ -20,6 +25,10 @@ const emit = defineEmits<{
   'update-brightness': [state: keyof Settings['brightness'], value: number]
   'update-color': [state: keyof Settings['colors'], color: string]
   'update-chime': [enabled: boolean]
+  'update-ambient-sound': [id: AmbientSoundId]
+  'update-ambient-volume': [value: number]
+  'update-sleep-timer': [minutes: number]
+  'stop-sound': []
   'preview-mode': [mode: LightMode]
   'stop-preview': []
   'reset-settings': []
@@ -27,6 +36,8 @@ const emit = defineEmits<{
 }>()
 
 const modes = MODE_ORDER.map(key => ({ key, ...MODE_PRESENTATION[key] }))
+const ambientSounds = AMBIENT_SOUNDS
+const sleepOptions = SLEEP_TIMER_OPTIONS
 
 // Move focus into the preview dock when it opens so keyboard users land on its
 // controls instead of being stranded behind the full-screen preview.
@@ -106,6 +117,23 @@ const updatePreviewColor = (event: Event) => {
 
 const onChimeToggle = (event: Event) => {
   emit('update-chime', (event.target as HTMLInputElement).checked)
+}
+
+// Tapping the sound that's currently playing stops it; any other tile selects
+// and starts that sound. The "Off" tile always stops.
+const onSoundTile = (id: AmbientSoundId) => {
+  if (props.activeSoundId === id && props.isSoundPlaying) {
+    emit('stop-sound')
+  } else {
+    emit('update-ambient-sound', id)
+  }
+}
+
+const onVolumeInput = (event: Event) => {
+  const value = parseInt((event.target as HTMLInputElement).value)
+  if (!isNaN(value)) {
+    emit('update-ambient-volume', value)
+  }
 }
 
 const confirmReset = () => {
@@ -250,6 +278,78 @@ const confirmReset = () => {
           </label>
         </div>
 
+        <!-- Ambient sounds -->
+        <div class="mb-6">
+          <h3 class="text-sm font-medium mb-1">Sounds</h3>
+          <p class="text-xs text-gray-500 mb-3">
+            Ambient sound to play while the light is on. Tap to start, tap again to stop.
+          </p>
+
+          <div class="sound-grid">
+            <button
+              v-for="sound in ambientSounds"
+              :key="sound.id"
+              @click="onSoundTile(sound.id)"
+              :aria-pressed="settings.ambientSound === sound.id"
+              class="sound-tile"
+              :class="{ 'sound-tile--active': settings.ambientSound === sound.id }"
+            >
+              <SoundIcon :name="sound.icon" class="w-6 h-6" />
+              <span class="sound-label">{{ sound.label }}</span>
+              <span
+                v-if="activeSoundId === sound.id && isSoundPlaying"
+                class="sound-playing"
+                aria-label="Playing"
+              />
+            </button>
+
+            <button
+              @click="$emit('stop-sound')"
+              :aria-pressed="settings.ambientSound === null"
+              class="sound-tile"
+              :class="{ 'sound-tile--active': settings.ambientSound === null }"
+            >
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                <path d="M22 9l-6 6" />
+                <path d="M16 9l6 6" />
+              </svg>
+              <span class="sound-label">Off</span>
+            </button>
+          </div>
+
+          <label class="block text-xs text-gray-400 mt-4 mb-1">
+            Volume: {{ settings.ambientVolume }}%
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            :value="settings.ambientVolume"
+            @input="onVolumeInput"
+            class="slider w-full"
+            aria-label="Ambient sound volume"
+          >
+
+          <label class="block text-xs text-gray-400 mt-4 mb-1">Sleep timer</label>
+          <div class="timer-row">
+            <button
+              v-for="minutes in sleepOptions"
+              :key="minutes"
+              @click="$emit('update-sleep-timer', minutes)"
+              :aria-pressed="settings.sleepTimerMinutes === minutes"
+              class="timer-chip"
+              :class="{ 'timer-chip--active': settings.sleepTimerMinutes === minutes }"
+            >
+              {{ minutes === 0 ? 'Off' : `${minutes}m` }}
+            </button>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">
+            Fades the sound out after this long. The light keeps running.
+          </p>
+        </div>
+
         <!-- Colors and Brightness -->
         <div class="mb-6">
           <h3 class="text-sm font-medium mb-1">Colors &amp; brightness</h3>
@@ -389,6 +489,68 @@ const confirmReset = () => {
 .preview-button {
   @apply w-full bg-gray-700/60 hover:bg-gray-600 text-blue-200 text-sm rounded-lg transition-colors;
   min-height: 44px;
+}
+
+/* Sound picker: a responsive grid of tap targets, each ≥ 44px tall. */
+.sound-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.sound-tile {
+  @apply relative flex flex-col items-center justify-center gap-1 bg-gray-800/60 hover:bg-gray-700 text-gray-200 rounded-lg transition-colors;
+  min-height: 68px;
+  padding: 0.5rem 0.25rem;
+  touch-action: manipulation;
+}
+
+.sound-tile--active {
+  @apply bg-blue-600/30 text-white;
+  box-shadow: inset 0 0 0 1.5px #3b82f6;
+}
+
+.sound-label {
+  @apply text-xs text-center leading-tight;
+}
+
+/* A small pulsing dot marking the sound that is actually playing right now. */
+.sound-playing {
+  @apply absolute rounded-full bg-green-400;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  animation: sound-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes sound-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.timer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.timer-chip {
+  @apply bg-gray-800/60 hover:bg-gray-700 text-gray-200 text-sm rounded-lg transition-colors;
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0 0.6rem;
+  touch-action: manipulation;
+}
+
+.timer-chip--active {
+  @apply bg-blue-600 text-white;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sound-playing {
+    animation: none;
+  }
 }
 
 /* Ensure inputs are touch-friendly on mobile */

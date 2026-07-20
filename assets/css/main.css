@@ -77,6 +77,12 @@
     bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
     left: max(1rem, env(safe-area-inset-left, 1rem));
   }
+
+  .sound-button-container {
+    @apply absolute z-10;
+    bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+    right: max(1rem, env(safe-area-inset-right, 1rem));
+  }
   
   .settings-button {
     @apply bg-black/50 hover:bg-black/70 rounded-full p-3 backdrop-blur-sm transition-colors;

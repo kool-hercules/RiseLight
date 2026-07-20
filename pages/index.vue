@@ -10,8 +10,11 @@
       :okay-to-rise-label="okayTimeLabel"
       :plan="plan"
       :current-time="currentTime"
+      :has-sound="settings.ambientSound !== null"
+      :is-sound-playing="isSoundPlaying"
       @toggle-nightlight="handleToggleNightLight"
       @toggle-settings="toggleSettings"
+      @toggle-sound="handleToggleSound"
     />
 
     <SettingsPanel
@@ -19,12 +22,18 @@
       :settings="settings"
       :preview-mode="previewMode"
       :save-failed="saveFailed"
+      :active-sound-id="activeSoundId"
+      :is-sound-playing="isSoundPlaying"
       @close="closeSettings"
       @update-wake-time="updateWakeTime"
       @update-wake-duration="updateWakeDuration"
       @update-brightness="updateBrightness"
       @update-color="updateColor"
       @update-chime="updateChimeEnabled"
+      @update-ambient-sound="ambient.selectSound"
+      @update-ambient-volume="ambient.setVolume"
+      @update-sleep-timer="ambient.setSleepTimer"
+      @stop-sound="ambient.stopSound"
       @preview-mode="startPreview"
       @stop-preview="stopPreview"
       @reset-settings="resetSettings"
@@ -47,6 +56,7 @@ import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'
 import { useWakeLock } from '../composables/useWakeLock'
 import { useChime } from '../composables/useChime'
+import { useAmbient } from '../composables/useAmbient'
 import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
 
 const {
@@ -99,12 +109,34 @@ useWakeLock(isActive)
 // autonomous transition hours later can still play audio on iOS.
 const chime = useChime(computed(() => settings.value.chimeEnabled))
 
-// Turning on is the one guaranteed user gesture, so unlock audio there.
+// Ambient sound (white noise, rain, etc). Its runtime playback state feeds the
+// settings picker so it can show which sound is currently playing.
+const ambient = useAmbient()
+const activeSoundId = ambient.activeSoundId
+const isSoundPlaying = ambient.isPlaying
+
+// Turning on is a guaranteed user gesture, so unlock audio there. Turning off
+// silences the ambient sound too (the device goes dark and quiet together),
+// while keeping the saved sound choice for next time.
 const handleToggleNightLight = () => {
   if (!isActive.value) {
     chime.prime()
+    ambient.prime()
+  } else {
+    ambient.stopPlayback()
   }
   toggleNightLight()
+}
+
+// Main-screen speaker button: start the saved sound (this tap unlocks audio) or
+// stop it if it's already playing.
+const handleToggleSound = () => {
+  if (isSoundPlaying.value) {
+    ambient.stopPlayback()
+  } else if (settings.value.ambientSound) {
+    ambient.prime()
+    void ambient.selectSound(settings.value.ambientSound)
+  }
 }
 
 // Sound the chime only when the schedule autonomously crosses into "okay to get

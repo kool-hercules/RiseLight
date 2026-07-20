@@ -1,4 +1,5 @@
-import type { LightMode, Settings } from '../types'
+import type { AmbientSoundId, LightMode, Settings } from '../types'
+import { AMBIENT_SOUND_IDS } from '../types'
 
 export const SETTINGS_STORAGE_KEY = 'nightlight-settings'
 export const SETTINGS_SCHEMA_VERSION = 1 as const
@@ -38,6 +39,9 @@ export const createDefaultSettings = (): Settings => ({
   wakeTime: '06:30',
   wakeDuration: 30,
   chimeEnabled: false,
+  ambientSound: null,
+  ambientVolume: 50,
+  sleepTimerMinutes: 0,
   brightness: {
     night: 20,
     wake: 45,
@@ -68,6 +72,16 @@ export const isValidDuration = (duration: unknown): duration is number => {
 
 export const isValidBrightness = (brightness: unknown): brightness is number => {
   return typeof brightness === 'number' && Number.isFinite(brightness) && brightness >= 0 && brightness <= 100
+}
+
+export const isValidAmbientSound = (value: unknown): value is AmbientSoundId | null => {
+  return value === null || (typeof value === 'string' && AMBIENT_SOUND_IDS.includes(value as AmbientSoundId))
+}
+
+// A whole number of minutes, 0 (off) through 480 (8h). We accept the full range
+// on parse for forward-compat even though the picker only offers a short list.
+export const isValidSleepTimer = (value: unknown): value is number => {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 480
 }
 
 export const normalizeWakeTime = (time: string): string => {
@@ -142,6 +156,13 @@ export const parseSettings = (stored: unknown): Settings => {
     chimeEnabled: typeof source.chimeEnabled === 'boolean'
       ? source.chimeEnabled
       : defaults.chimeEnabled,
+    ambientSound: isValidAmbientSound(source.ambientSound)
+      ? source.ambientSound
+      : defaults.ambientSound,
+    ambientVolume: boundedNumber(source.ambientVolume, defaults.ambientVolume, 0, 100),
+    sleepTimerMinutes: isValidSleepTimer(source.sleepTimerMinutes)
+      ? source.sleepTimerMinutes
+      : defaults.sleepTimerMinutes,
     brightness,
     colors
   }

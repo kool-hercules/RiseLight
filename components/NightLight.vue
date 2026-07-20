@@ -70,6 +70,47 @@
         </svg>
       </button>
     </div>
+
+    <!-- Sound quick-toggle: mirror the gear on the opposite corner so a parent
+         can start/stop the chosen sound in a dark room without opening settings.
+         Only shown once a sound has been picked. -->
+    <div v-if="hasSound" class="sound-button-container">
+      <button
+        @click.stop="$emit('toggle-sound')"
+        class="settings-button"
+        :aria-label="isSoundPlaying ? 'Stop sound' : 'Play sound'"
+        :aria-pressed="isSoundPlaying"
+      >
+        <svg
+          v-if="isSoundPlaying"
+          class="w-6 h-6 text-white"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M11 5L6 9H2v6h4l5 4V5z" />
+          <path d="M15.5 8.5a5 5 0 010 7" />
+          <path d="M18.5 5.5a9 9 0 010 13" />
+        </svg>
+        <svg
+          v-else
+          class="w-6 h-6 text-white/70"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M11 5L6 9H2v6h4l5 4V5z" />
+          <path d="M22 9l-6 6" />
+          <path d="M16 9l6 6" />
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -97,6 +138,8 @@ interface Props {
   okayToRiseLabel: string
   plan: PlanPhase[]
   currentTime: Date
+  hasSound: boolean
+  isSoundPlaying: boolean
 }
 
 const props = defineProps<Props>()
@@ -104,6 +147,7 @@ const props = defineProps<Props>()
 defineEmits<{
   'toggle-nightlight': []
   'toggle-settings': []
+  'toggle-sound': []
 }>()
 
 // Idle handling: once the light is on and the user has been still for a while,
