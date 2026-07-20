@@ -70,6 +70,67 @@
         </svg>
       </button>
     </div>
+
+    <!-- Help: an always-available "?" explainer, with a subtle one-time nudge on
+         first run so a new user isn't lost — no full-screen intro. -->
+    <div class="help-button-container">
+      <div v-if="showHint" class="help-hint" role="status">
+        New here? Tap for a quick guide
+      </div>
+      <button
+        @click.stop="$emit('toggle-help')"
+        class="settings-button"
+        :class="{ 'help-pulse': showHint }"
+        aria-label="How RiseLight works"
+      >
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M9.5 9.2a2.5 2.5 0 015 .1c0 1.6-1.7 2-2.4 2.7-.3.3-.6.7-.6 1.5" />
+          <path d="M12 17h.01" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Sound quick-toggle: mirror the gear on the opposite corner so a parent
+         can start/stop the chosen sound in a dark room without opening settings.
+         Only shown once a sound has been picked. -->
+    <div v-if="hasSound" class="sound-button-container">
+      <button
+        @click.stop="$emit('toggle-sound')"
+        class="settings-button"
+        :aria-label="isSoundPlaying ? 'Stop sound' : 'Play sound'"
+        :aria-pressed="isSoundPlaying"
+      >
+        <svg
+          v-if="isSoundPlaying"
+          class="w-6 h-6 text-white"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M11 5L6 9H2v6h4l5 4V5z" />
+          <path d="M15.5 8.5a5 5 0 010 7" />
+          <path d="M18.5 5.5a9 9 0 010 13" />
+        </svg>
+        <svg
+          v-else
+          class="w-6 h-6 text-white/70"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M11 5L6 9H2v6h4l5 4V5z" />
+          <path d="M22 9l-6 6" />
+          <path d="M16 9l6 6" />
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -97,6 +158,9 @@ interface Props {
   okayToRiseLabel: string
   plan: PlanPhase[]
   currentTime: Date
+  hasSound: boolean
+  isSoundPlaying: boolean
+  showHint: boolean
 }
 
 const props = defineProps<Props>()
@@ -104,6 +168,8 @@ const props = defineProps<Props>()
 defineEmits<{
   'toggle-nightlight': []
   'toggle-settings': []
+  'toggle-sound': []
+  'toggle-help': []
 }>()
 
 // Idle handling: once the light is on and the user has been still for a while,
@@ -200,6 +266,64 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* Help "?" button: sits just to the right of the gear (bottom-left). */
+.help-button-container {
+  position: absolute;
+  z-index: 10;
+  bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+  left: calc(max(1rem, env(safe-area-inset-left, 1rem)) + 3.75rem);
+}
+
+/* One-time first-run nudge floating just above the "?". */
+.help-hint {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  width: max-content;
+  max-width: 62vw;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.6rem;
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  animation: help-hint-in 0.4s ease-out;
+}
+
+/* A soft expanding ring while the first-run nudge is active. */
+.help-pulse {
+  position: relative;
+}
+
+.help-pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 0 rgba(147, 197, 253, 0.55);
+  animation: help-ring 2s ease-out infinite;
+}
+
+@keyframes help-ring {
+  0% { box-shadow: 0 0 0 0 rgba(147, 197, 253, 0.5); }
+  70% { box-shadow: 0 0 0 14px rgba(147, 197, 253, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(147, 197, 253, 0); }
+}
+
+@keyframes help-hint-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-pulse::after,
+  .help-hint {
+    animation: none;
+  }
+}
+
 /* Clear the notch/home-indicator on all sides; extra horizontal room so the
    teaching text and control never sit under a landscape notch. */
 .center-stage {

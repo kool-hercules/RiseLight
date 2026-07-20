@@ -55,6 +55,9 @@ describe('settings persistence', () => {
       wakeTime: '07:05',
       wakeDuration: 60,
       chimeEnabled: false,
+      ambientSound: null,
+      ambientVolume: 50,
+      sleepTimerMinutes: 0,
       brightness: {
         night: 0,
         wake: 0,
@@ -112,6 +115,9 @@ describe('settings persistence', () => {
       wakeTime: '05:45',
       wakeDuration: 20,
       chimeEnabled: false,
+      ambientSound: null,
+      ambientVolume: 50,
+      sleepTimerMinutes: 0,
       brightness: {
         night: 0,
         wake: 65,
@@ -143,6 +149,48 @@ describe('settings persistence', () => {
       [SETTINGS_STORAGE_KEY]: JSON.stringify({ chimeEnabled: 'yes' })
     })
     expect(loadSettingsFromStorage(bogus).chimeEnabled).toBe(false)
+  })
+
+  it('defaults the ambient fields and keeps them off for legacy data', () => {
+    const defaults = createDefaultSettings()
+    expect(defaults.ambientSound).toBe(null)
+    expect(defaults.ambientVolume).toBe(50)
+    expect(defaults.sleepTimerMinutes).toBe(0)
+
+    // A record predating ambient sound → defaults, no version bump needed.
+    const legacy = new MemoryStorage({
+      [SETTINGS_STORAGE_KEY]: JSON.stringify({ wakeTime: '06:00', wakeDuration: 15 })
+    })
+    const loaded = loadSettingsFromStorage(legacy)
+    expect(loaded.ambientSound).toBe(null)
+    expect(loaded.ambientVolume).toBe(50)
+    expect(loaded.sleepTimerMinutes).toBe(0)
+  })
+
+  it('validates, clamps, and round-trips the ambient fields', () => {
+    const round = new MemoryStorage()
+    const custom = createDefaultSettings()
+    custom.ambientSound = 'rain'
+    custom.ambientVolume = 80
+    custom.sleepTimerMinutes = 45
+    saveSettingsToStorage(round, custom)
+    const reloaded = loadSettingsFromStorage(round)
+    expect(reloaded.ambientSound).toBe('rain')
+    expect(reloaded.ambientVolume).toBe(80)
+    expect(reloaded.sleepTimerMinutes).toBe(45)
+
+    // Invalid ids drop to null; volume clamps; non-integer/out-of-range timer resets.
+    const invalid = new MemoryStorage({
+      [SETTINGS_STORAGE_KEY]: JSON.stringify({
+        ambientSound: 'thunderstorm',
+        ambientVolume: 250,
+        sleepTimerMinutes: 999
+      })
+    })
+    const cleaned = loadSettingsFromStorage(invalid)
+    expect(cleaned.ambientSound).toBe(null)
+    expect(cleaned.ambientVolume).toBe(100)
+    expect(cleaned.sleepTimerMinutes).toBe(0)
   })
 })
 

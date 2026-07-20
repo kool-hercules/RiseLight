@@ -10,8 +10,13 @@
       :okay-to-rise-label="okayTimeLabel"
       :plan="plan"
       :current-time="currentTime"
+      :has-sound="settings.ambientSound !== null"
+      :is-sound-playing="isSoundPlaying"
+      :show-hint="showFirstRunHint"
       @toggle-nightlight="handleToggleNightLight"
-      @toggle-settings="toggleSettings"
+      @toggle-settings="handleToggleSettings"
+      @toggle-sound="handleToggleSound"
+      @toggle-help="toggleHelp"
     />
 
     <SettingsPanel
@@ -19,34 +24,42 @@
       :settings="settings"
       :preview-mode="previewMode"
       :save-failed="saveFailed"
+      :active-sound-id="activeSoundId"
+      :is-sound-playing="isSoundPlaying"
       @close="closeSettings"
       @update-wake-time="updateWakeTime"
       @update-wake-duration="updateWakeDuration"
       @update-brightness="updateBrightness"
       @update-color="updateColor"
       @update-chime="updateChimeEnabled"
+      @update-ambient-sound="ambient.selectSound"
+      @update-ambient-volume="ambient.setVolume"
+      @update-sleep-timer="ambient.setSleepTimer"
+      @stop-sound="ambient.stopSound"
       @preview-mode="startPreview"
       @stop-preview="stopPreview"
       @reset-settings="resetSettings"
-      @restart-intro="handleRestartIntro"
+      @show-help="handleShowHelp"
     />
 
-    <OnboardingOverlay
-      v-if="showOnboarding"
+    <HelpPopover
+      v-if="showHelp"
       :settings="settings"
-      @update-wake-time="updateWakeTime"
-      @complete="completeOnboarding"
+      @close="closeHelp"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'
 import { useWakeLock } from '../composables/useWakeLock'
+import { useKeepAwake } from '../composables/useKeepAwake'
 import { useChime } from '../composables/useChime'
+import { useAmbient } from '../composables/useAmbient'
+import { useWakeAlarm } from '../composables/useWakeAlarm'
 import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
 
 const {
@@ -72,6 +85,7 @@ const {
   humanTimeRemaining,
   almostTimeLabel,
   okayTimeLabel,
+  nextWakeTime,
   toggleNightLight,
   startPreview,
   stopPreview
@@ -89,22 +103,84 @@ const plan = computed(() =>
   }))
 )
 
-const { showOnboarding, completeOnboarding, restartOnboarding } = useOnboarding()
+// On-demand help replaces the old full-screen intro. The one-time first-run
+// "hint" reuses the onboarding flag: it shows a subtle nudge on the "?" until
+// the user's first meaningful interaction, then never returns.
+const { showOnboarding: showFirstRunHint, completeOnboarding: dismissFirstRunHint } = useOnboarding()
+const showHelp = ref(false)
+
+const openHelp = () => {
+  dismissFirstRunHint()
+  showHelp.value = true
+}
+const closeHelp = () => {
+  showHelp.value = false
+}
+const toggleHelp = () => {
+  if (showHelp.value) {
+    closeHelp()
+  } else {
+    openHelp()
+  }
+}
+
+// Any of these first interactions retires the first-run hint.
+const handleToggleSettings = () => {
+  dismissFirstRunHint()
+  toggleSettings()
+}
+
+// "How it works" from Settings: close the panel, then show the help popover.
+const handleShowHelp = () => {
+  if (isSettingsOpen.value) {
+    toggleSettings()
+  }
+  openHelp()
+}
 
 // Keep the screen awake while the light is on — a night light that sleeps is
-// useless.
+// useless. useWakeLock covers the web; useKeepAwake is its native counterpart
+// (no-op on web).
 useWakeLock(isActive)
+useKeepAwake(isActive)
+
+// Native-only: fire an "okay to get up" local notification at the wake
+// transition even if the app is closed/backgrounded. No-op on the web PWA.
+useWakeAlarm(isActive, nextWakeTime, settings)
 
 // Optional "okay to get up" chime. Priming happens inside the Turn On tap so the
 // autonomous transition hours later can still play audio on iOS.
 const chime = useChime(computed(() => settings.value.chimeEnabled))
 
-// Turning on is the one guaranteed user gesture, so unlock audio there.
+// Ambient sound (white noise, rain, etc). Its runtime playback state feeds the
+// settings picker so it can show which sound is currently playing.
+const ambient = useAmbient()
+const activeSoundId = ambient.activeSoundId
+const isSoundPlaying = ambient.isPlaying
+
+// Turning on is a guaranteed user gesture, so unlock audio there. Turning off
+// silences the ambient sound too (the device goes dark and quiet together),
+// while keeping the saved sound choice for next time.
 const handleToggleNightLight = () => {
+  dismissFirstRunHint()
   if (!isActive.value) {
     chime.prime()
+    ambient.prime()
+  } else {
+    ambient.stopPlayback()
   }
   toggleNightLight()
+}
+
+// Main-screen speaker button: start the saved sound (this tap unlocks audio) or
+// stop it if it's already playing.
+const handleToggleSound = () => {
+  if (isSoundPlaying.value) {
+    ambient.stopPlayback()
+  } else if (settings.value.ambientSound) {
+    ambient.prime()
+    void ambient.selectSound(settings.value.ambientSound)
+  }
 }
 
 // Sound the chime only when the schedule autonomously crosses into "okay to get
@@ -129,28 +205,19 @@ const closeSettings = () => {
   }
 }
 
-const handleRestartIntro = () => {
-  restartOnboarding()
-  if (isSettingsOpen.value) {
-    toggleSettings()
-  }
-}
-
 // Keyboard shortcuts
 const handleKeyDown = (event: KeyboardEvent) => {
-  if (showOnboarding.value) {
-    return
-  }
-
   switch (event.key) {
     case ' ':
-      if (!isSettingsOpen.value) {
+      if (!isSettingsOpen.value && !showHelp.value) {
         event.preventDefault()
         handleToggleNightLight()
       }
       break
     case 'Escape':
-      if (isSettingsOpen.value) {
+      if (showHelp.value) {
+        closeHelp()
+      } else if (isSettingsOpen.value) {
         closeSettings()
       }
       break

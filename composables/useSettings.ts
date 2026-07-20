@@ -1,11 +1,13 @@
 import { readonly, ref, watch } from 'vue'
-import type { Settings } from '../types'
+import type { AmbientSoundId, Settings } from '../types'
 import {
   createDefaultSettings,
   getBrowserStorage,
+  isValidAmbientSound,
   isValidBrightness,
   isValidColor,
   isValidDuration,
+  isValidSleepTimer,
   isValidWakeTime,
   loadSettingsFromStorage,
   normalizeWakeTime,
@@ -81,6 +83,24 @@ const updateChimeEnabled = (enabled: boolean): void => {
   settingsState.value.chimeEnabled = Boolean(enabled)
 }
 
+const updateAmbientSound = (sound: AmbientSoundId | null): void => {
+  if (isValidAmbientSound(sound)) {
+    settingsState.value.ambientSound = sound
+  }
+}
+
+const updateAmbientVolume = (value: number): void => {
+  if (isValidBrightness(value)) {
+    settingsState.value.ambientVolume = value
+  }
+}
+
+const updateSleepTimerMinutes = (minutes: number): void => {
+  if (isValidSleepTimer(minutes)) {
+    settingsState.value.sleepTimerMinutes = minutes
+  }
+}
+
 const toggleSettings = (): void => {
   isSettingsOpen.value = !isSettingsOpen.value
 }
@@ -115,6 +135,9 @@ const settingsApi = {
   updateBrightness,
   updateColor,
   updateChimeEnabled,
+  updateAmbientSound,
+  updateAmbientVolume,
+  updateSleepTimerMinutes,
   toggleSettings,
   resetSettings,
   exportSettings,
@@ -122,7 +145,9 @@ const settingsApi = {
   isValidWakeTime,
   isValidDuration,
   isValidBrightness,
-  isValidColor
+  isValidColor,
+  isValidAmbientSound,
+  isValidSleepTimer
 }
 
 export const useSettings = () => {
