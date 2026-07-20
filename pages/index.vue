@@ -57,6 +57,7 @@ import { useOnboarding } from '../composables/useOnboarding'
 import { useWakeLock } from '../composables/useWakeLock'
 import { useChime } from '../composables/useChime'
 import { useAmbient } from '../composables/useAmbient'
+import { useWakeAlarm } from '../composables/useWakeAlarm'
 import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
 
 const {
@@ -82,6 +83,7 @@ const {
   humanTimeRemaining,
   almostTimeLabel,
   okayTimeLabel,
+  nextWakeTime,
   toggleNightLight,
   startPreview,
   stopPreview
@@ -104,6 +106,10 @@ const { showOnboarding, completeOnboarding, restartOnboarding } = useOnboarding(
 // Keep the screen awake while the light is on — a night light that sleeps is
 // useless.
 useWakeLock(isActive)
+
+// Native-only: fire an "okay to get up" local notification at the wake
+// transition even if the app is closed/backgrounded. No-op on the web PWA.
+useWakeAlarm(isActive, nextWakeTime, settings)
 
 // Optional "okay to get up" chime. Priming happens inside the Turn On tap so the
 // autonomous transition hours later can still play audio on iOS.

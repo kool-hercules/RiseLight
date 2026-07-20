@@ -50,11 +50,22 @@ npx cap open android      # open in Android Studio → run
    session are intact after a `cap sync` (sync doesn't overwrite native source,
    but re-check after Capacitor upgrades).
 
+## Alarm when the app is closed (implemented)
+
+`@capacitor/local-notifications` is wired via `composables/useWakeAlarm.ts`: when
+the light is on, it schedules an "okay to get up" notification at the wake
+transition (wake time + wake-up window) so the alarm fires even if the app is
+closed or the screen is locked. It reschedules when the wake time/window changes
+and cancels when the light is turned off. On the web PWA it's a **silent no-op**
+(`Capacitor.isNativePlatform()` is false), so the same code runs everywhere.
+
+- On first schedule on device it requests notification permission.
+- To verify: on a real device, turn the light on with a near-future wake time,
+  fully close the app, and confirm the notification fires. (Timing is exact via
+  the OS scheduler — it does not depend on the app running.)
+
 ## Next steps (not yet implemented)
 
-- **Alarm when the app is closed**: add `@capacitor/local-notifications`,
-  schedule a notification at the wake time so the alarm fires even if the app
-  isn't foregrounded. Pair with the existing schedule in `useNightLight`.
 - **Keep-awake**: the web `useWakeLock` covers foreground; consider
   `@capacitor-community/keep-awake` for parity in the native shell.
 - **Store assets**: app icons/splash via `@capacitor/assets`; set version and
