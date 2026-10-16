@@ -11,7 +11,18 @@
       :needs-audio-unlock="needsAudioUnlock"
       :screen-may-sleep="screenMaySleep"
       @reveal="openParent"
-    />
+    >
+      <template #scene>
+        <KidScene
+          v-if="settings.sceneEnabled"
+          :state="currentState"
+          :progress="progress"
+          :color="displayColor"
+          :brightness="displayBrightness"
+          :preview-mode="previewMode"
+        />
+      </template>
+    </NightLight>
 
     <ParentControls
       v-if="parentVisible"
@@ -113,6 +124,7 @@ const {
   displayColor,
   displayBrightness,
   currentState,
+  progress,
   previewMode,
   humanTimeRemaining,
   okayTimeLabel,
