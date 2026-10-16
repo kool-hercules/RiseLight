@@ -63,19 +63,3 @@ export type Settings = {
   brightness: Record<LightMode, number>
   colors: Record<LightMode, string>
 }
-
-export type TimerInfo = {
-  currentTime: Date
-  nextWakeTime: Date | null
-  timeRemaining: number // milliseconds
-  currentState: LightState
-  currentColor: LightColor
-  isActive: boolean
-}
-
-export type NightLightStore = {
-  settings: Settings
-  timerInfo: TimerInfo
-  isSettingsOpen: boolean
-  previewMode: LightMode | null
-}

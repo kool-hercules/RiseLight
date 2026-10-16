@@ -147,6 +147,16 @@ describe('ambient player', () => {
     expect(ctx.bufferSources.length).toBeGreaterThanOrEqual(2)
   })
 
+  it('resolves false from play() and prime() while autoplay is blocked', async () => {
+    const ctx = new FakeAudioContext('suspended')
+    ctx.resume = vi.fn(async () => {})
+    const player = createAmbientPlayer({ factory: () => ctx as never })
+
+    await expect(player.play('rain')).resolves.toBe(false)
+    await expect(player.prime()).resolves.toBe(false)
+    expect(player.isPlaying()).toBe(false)
+  })
+
   it('clamps volume to 0..1 on the master gain', async () => {
     const ctx = new FakeAudioContext('suspended')
     const player = createAmbientPlayer({ factory: () => ctx as never })
@@ -177,8 +187,8 @@ describe('ambient player', () => {
   it('no-ops without throwing when Web Audio is unavailable', async () => {
     const player = createAmbientPlayer({ factory: () => null })
 
-    await expect(player.prime()).resolves.toBeUndefined()
-    await expect(player.play('white')).resolves.toBeUndefined()
+    await expect(player.prime()).resolves.toBe(true)
+    await expect(player.play('white')).resolves.toBe(true)
     expect(player.isPlaying()).toBe(false)
     player.setVolume(0.5)
     await expect(player.fadeOutAndStop(5)).resolves.toBeUndefined()

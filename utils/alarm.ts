@@ -1,20 +1,17 @@
-// When the "okay to get up" alarm should fire: the wake-time anchor plus the
-// wake-up window. Returns null when there's no active schedule or the moment has
-// already passed (nothing to schedule). Pure so it can be unit-tested without
-// the native notifications plugin.
-export const computeAlarmTime = (
-  nextWakeTime: Date | null,
-  wakeDurationMinutes: number,
-  nowMs: number
-): Date | null => {
-  if (!nextWakeTime) {
-    return null
-  }
+import type { Settings } from '../types'
+import { upcomingOkayToWake, type Override } from './routine'
 
-  const at = nextWakeTime.getTime() + wakeDurationMinutes * 60_000
-  if (!Number.isFinite(at) || at <= nowMs) {
-    return null
-  }
+// Native "okay to get up" notifications: one per upcoming okay-to-wake instant
+// for the next week, IDs 1001–1007. Every re-sync cancels all seven and
+// reschedules, so an edited schedule never double-fires.
+export const ALARM_BASE_ID = 1001
+export const ALARM_COUNT = 7
 
-  return new Date(at)
-}
+export const ALARM_IDS: readonly number[] = Array.from({ length: ALARM_COUNT }, (_, index) => ALARM_BASE_ID + index)
+
+export type AlarmPlan = { id: number; at: Date }[]
+
+// Pure so it can be unit-tested without the native notifications plugin.
+export const planAlarms = (now: Date, settings: Settings, override: Override | null): AlarmPlan =>
+  upcomingOkayToWake(now, settings, override, ALARM_COUNT)
+    .map((at, index) => ({ id: ALARM_BASE_ID + index, at }))

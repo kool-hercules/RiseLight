@@ -1,26 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { computeAlarmTime } from '../utils/alarm'
+import { ALARM_IDS, planAlarms } from '../utils/alarm'
+import { createDefaultSettings } from '../utils/settings'
 
-describe('computeAlarmTime', () => {
-  const now = new Date('2026-07-20T22:00:00Z').getTime()
+// 2026-10-16 is a Friday.
+const at = (day: number, hours: number, minutes = 0): Date => new Date(2026, 9, day, hours, minutes)
 
-  it('is the wake anchor plus the wake-up window', () => {
-    const wake = new Date('2026-07-21T06:30:00Z')
-    const at = computeAlarmTime(wake, 30, now)
-    expect(at?.toISOString()).toBe('2026-07-21T07:00:00.000Z')
+describe('planAlarms', () => {
+  it('schedules the next seven okay-to-get-up times with stable IDs', () => {
+    const plan = planAlarms(at(16, 12), createDefaultSettings(), null)
+    expect(plan.map(alarm => alarm.id)).toEqual([...ALARM_IDS])
+    expect(plan[0].at.getTime()).toBe(at(17, 7).getTime())
+    expect(plan[6].at.getTime()).toBe(at(23, 7).getTime())
   })
 
-  it('returns null with no active schedule', () => {
-    expect(computeAlarmTime(null, 30, now)).toBe(null)
+  it('schedules nothing with auto-schedule off and no override', () => {
+    const settings = { ...createDefaultSettings(), autoSchedule: false }
+    expect(planAlarms(at(16, 12), settings, null)).toEqual([])
   })
 
-  it('returns null once the moment has already passed', () => {
-    const wake = new Date('2026-07-20T21:00:00Z') // window ended before now
-    expect(computeAlarmTime(wake, 30, now)).toBe(null)
-  })
-
-  it('handles a zero-length window (fires at the wake time)', () => {
-    const wake = new Date('2026-07-21T06:30:00Z')
-    expect(computeAlarmTime(wake, 0, now)?.toISOString()).toBe('2026-07-21T06:30:00.000Z')
+  it('includes a manual night when auto-schedule is off', () => {
+    const settings = { ...createDefaultSettings(), autoSchedule: false }
+    const plan = planAlarms(at(16, 21, 1), settings, { kind: 'on', start: at(16, 21).getTime() })
+    expect(plan).toEqual([{ id: 1001, at: at(17, 7) }])
   })
 })

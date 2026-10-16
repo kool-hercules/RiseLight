@@ -14,6 +14,8 @@
 // can't be created, or autoplay is still blocked — a night light must never
 // throw because a sound didn't play.
 
+import { resumeTimeout } from './ambient'
+
 type MinimalAudioContext = Pick<
   AudioContext,
   'state' | 'currentTime' | 'destination' | 'resume' | 'createOscillator' | 'createGain' | 'close'
@@ -39,9 +41,11 @@ export const defaultAudioContextFactory: AudioContextFactory = () => {
   }
 }
 
+// prime()/play() resolve false only when audio is blocked pending a user
+// gesture; with no Web Audio at all there is nothing to unlock, so true.
 export interface ChimePlayer {
-  prime: () => Promise<void>
-  play: () => Promise<void>
+  prime: () => Promise<boolean>
+  play: () => Promise<boolean>
   isPrimed: () => boolean
   dispose: () => Promise<void>
 }
@@ -99,17 +103,18 @@ export const createChimePlayer = (
   const resumeIfNeeded = async (ctx: MinimalAudioContext): Promise<void> => {
     if (ctx.state === 'suspended') {
       try {
-        await ctx.resume()
+        // Without a gesture some browsers leave resume() pending forever.
+        await Promise.race([ctx.resume(), resumeTimeout()])
       } catch {
         // Autoplay still blocked — leave the context as-is; play() will bail.
       }
     }
   }
 
-  const prime = async (): Promise<void> => {
+  const prime = async (): Promise<boolean> => {
     const ctx = ensureContext()
     if (!ctx) {
-      return
+      return true
     }
 
     await resumeIfNeeded(ctx)
@@ -121,17 +126,18 @@ export const createChimePlayer = (
     } catch {
       // Scheduling failed — not primed, but never surface an error.
     }
+    return ctx.state === 'running'
   }
 
-  const play = async (): Promise<void> => {
+  const play = async (): Promise<boolean> => {
     const ctx = ensureContext()
     if (!ctx) {
-      return
+      return true
     }
 
     await resumeIfNeeded(ctx)
     if (ctx.state !== 'running') {
-      return
+      return false
     }
 
     try {
@@ -141,6 +147,7 @@ export const createChimePlayer = (
     } catch {
       // Never let a failed chime break the light.
     }
+    return true
   }
 
   const dispose = async (): Promise<void> => {

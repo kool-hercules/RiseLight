@@ -15,6 +15,25 @@
       </div>
     </div>
 
+    <!-- Status badges: tiny and dim so they never wake anyone. -->
+    <div class="status-badges" aria-live="polite">
+      <span v-if="needsAudioUnlock" class="status-badge" role="status" aria-label="Tap anywhere to turn sound on">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 5L6 9H2v6h4l5 4V5z" />
+          <path d="M15.5 8.5a5 5 0 010 7" />
+        </svg>
+      </span>
+      <span v-if="screenMaySleep" class="status-badge" role="status" aria-label="The screen may go to sleep">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="7" y="2" width="10" height="20" rx="2" />
+          <path d="M12 18h.01" />
+        </svg>
+      </span>
+    </div>
+    <p v-if="screenMaySleep && !isActive" class="screen-warning">
+      Keep RiseLight open, on screen and plugged in.
+    </p>
+
     <!-- Center: teaches the current state at a glance, then the control -->
     <div class="center-stage absolute inset-0 flex items-center justify-center z-10">
       <div class="text-center legible">
@@ -31,7 +50,7 @@
           @click.stop="$emit('toggle-nightlight')"
           class="control-button text-xl min-w-[140px]"
         >
-          {{ isActive ? 'Turn Off' : 'Turn On' }}
+          {{ isActive ? 'Off for now' : 'Start now' }}
         </button>
 
         <!-- Tonight's plan: a quiet, at-a-glance reminder of the three phases so
@@ -161,6 +180,8 @@ interface Props {
   hasSound: boolean
   isSoundPlaying: boolean
   showHint: boolean
+  needsAudioUnlock?: boolean
+  screenMaySleep?: boolean
 }
 
 const props = defineProps<Props>()
@@ -217,10 +238,12 @@ const detail = computed(() => {
   }
 
   if (!props.isActive) {
-    return 'Tap Turn On to start tonight’s light.'
+    return 'The light follows tonight’s plan on its own.'
   }
 
   switch (props.currentState) {
+    case 'bedtime':
+      return 'Wind down — lights out soon.'
     case 'night':
       return props.okayToRiseLabel
         ? `Okay to get up at ${props.okayToRiseLabel}`
@@ -266,6 +289,27 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.status-badges {
+  position: absolute;
+  z-index: 10;
+  top: max(1rem, env(safe-area-inset-top, 1rem));
+  left: max(1rem, env(safe-area-inset-left, 1rem));
+  display: flex;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+
+.screen-warning {
+  position: absolute;
+  z-index: 10;
+  top: calc(max(1rem, env(safe-area-inset-top, 1rem)) + 1.75rem);
+  left: max(1rem, env(safe-area-inset-left, 1rem));
+  max-width: 60vw;
+  font-size: 0.75rem;
+  color: #fcd34d;
+}
+
 /* Help "?" button: sits just to the right of the gear (bottom-left). */
 .help-button-container {
   position: absolute;

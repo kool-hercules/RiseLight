@@ -3,7 +3,7 @@
     <NightLight
       :current-color="displayColor"
       :brightness="displayBrightness"
-      :is-active="isActive"
+      :is-active="isLit"
       :current-state="currentState"
       :preview-mode="previewMode"
       :human-time-remaining="humanTimeRemaining"
@@ -13,6 +13,8 @@
       :has-sound="settings.ambientSound !== null"
       :is-sound-playing="isSoundPlaying"
       :show-hint="showFirstRunHint"
+      :needs-audio-unlock="needsAudioUnlock"
+      :screen-may-sleep="screenMaySleep"
       @toggle-nightlight="handleToggleNightLight"
       @toggle-settings="handleToggleSettings"
       @toggle-sound="handleToggleSound"
@@ -27,7 +29,7 @@
       :active-sound-id="activeSoundId"
       :is-sound-playing="isSoundPlaying"
       @close="closeSettings"
-      @update-wake-time="time => updateSchedule(buildSameSchedule({ wakeTime: time, bedtime: settings.schedule[0].bedtime }))"
+      @update-wake-time="handleUpdateWakeTime"
       @update-wake-duration="updateWakeDuration"
       @update-brightness="updateBrightness"
       @update-color="updateColor"
@@ -52,6 +54,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { refDebounced } from '@vueuse/core'
+import type { AmbientSoundId, LightState } from '../types'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'
@@ -60,8 +64,9 @@ import { useKeepAwake } from '../composables/useKeepAwake'
 import { useChime } from '../composables/useChime'
 import { useAmbient } from '../composables/useAmbient'
 import { useWakeAlarm } from '../composables/useWakeAlarm'
-import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
+import { MODE_PRESENTATION } from '../utils/modes'
 import { buildSameSchedule } from '../utils/settings'
+import { formatClockTime } from '../utils/time'
 
 const {
   settings,
@@ -73,36 +78,49 @@ const {
   updateBrightness,
   updateColor,
   updateChimeEnabled,
+  updateLastNapMinutes,
   resetSettings
 } = useSettings()
 
+const runtime = useNightLight(settings)
 const {
   currentTime,
-  isActive,
+  isLit,
+  isArmed,
   displayColor,
   displayBrightness,
   currentState,
   previewMode,
   humanTimeRemaining,
-  almostTimeLabel,
   okayTimeLabel,
-  nextWakeTime,
-  toggleNightLight,
+  startNow,
+  startNap,
+  turnOffForNow,
   startPreview,
   stopPreview
-} = useNightLight(settings)
+} = runtime
 
-// "Tonight's plan": the three phases with their times, reactive to settings, so
-// the mental model is reinforced on the home screen before the light is on.
-const plan = computed(() =>
-  MODE_ORDER.map(key => ({
-    key,
-    label: MODE_PRESENTATION[key].label,
-    icon: MODE_PRESENTATION[key].icon,
-    color: settings.value.colors[key],
-    time: key === 'night' ? 'Now' : key === 'wake' ? almostTimeLabel.value : okayTimeLabel.value
-  }))
-)
+// "Tonight's plan": each phase with its time, reactive to settings and the
+// weekly schedule, so the routine is visible at a glance.
+const plan = computed(() => {
+  const night = runtime.plan.value
+  const auto = settings.value.autoSchedule
+  const rows: { key: 'bedtime' | 'night' | 'wake' | 'awake'; at: Date | null }[] = [
+    { key: 'bedtime', at: night.windStart },
+    { key: 'night', at: auto ? night.bedtime : null },
+    { key: 'wake', at: night.wakeAt },
+    { key: 'awake', at: night.okayAt }
+  ]
+  return rows
+    .filter(row => row.key !== 'bedtime' || (auto && settings.value.windDownMinutes > 0))
+    .map(row => ({
+      key: row.key,
+      label: MODE_PRESENTATION[row.key].label,
+      icon: MODE_PRESENTATION[row.key].icon,
+      color: settings.value.colors[row.key],
+      time: row.at ? formatClockTime(row.at) : 'Now'
+    }))
+})
 
 // On-demand help replaces the old full-screen intro. The one-time first-run
 // "hint" reuses the onboarding flag: it shows a subtle nudge on the "?" until
@@ -139,38 +157,128 @@ const handleShowHelp = () => {
   openHelp()
 }
 
-// Keep the screen awake while the light is on — a night light that sleeps is
-// useless. useWakeLock covers the web; useKeepAwake is its native counterpart
-// (no-op on web).
-useWakeLock(isActive)
-useKeepAwake(isActive)
+// Keep the screen awake while the routine is armed — a night light that sleeps
+// is useless. useWakeLock covers the web; useKeepAwake is its native
+// counterpart (no-op on web).
+const wakeLock = useWakeLock(isArmed)
+const keepAwake = useKeepAwake(isArmed)
 
-// Native-only: fire an "okay to get up" local notification at the wake
-// transition even if the app is closed/backgrounded. No-op on the web PWA.
-useWakeAlarm(isActive, nextWakeTime, settings)
+// Warn when armed but nothing is holding the screen on. Debounced so the brief
+// gap while the lock is being acquired never flashes the warning.
+const screenMaySleep = refDebounced(
+  computed(() => isArmed.value && !keepAwake.supported && (!wakeLock.supported.value || !wakeLock.held.value)),
+  2000
+)
 
-// Optional "okay to get up" chime. Priming happens inside the Turn On tap so the
-// autonomous transition hours later can still play audio on iOS.
+// Native-only: schedule the next week of "okay to get up" notifications so
+// they fire even if the app is closed/backgrounded. No-op on the web PWA.
+useWakeAlarm(runtime, settings)
+
+// Optional "okay to get up" chime, and ambient sound (white noise, rain, etc).
 const chime = useChime(computed(() => settings.value.chimeEnabled))
-
-// Ambient sound (white noise, rain, etc). Its runtime playback state feeds the
-// settings picker so it can show which sound is currently playing.
 const ambient = useAmbient()
 const activeSoundId = ambient.activeSoundId
 const isSoundPlaying = ambient.isPlaying
 
-// Turning on is a guaranteed user gesture, so unlock audio there. Turning off
-// silences the ambient sound too (the device goes dark and quiet together),
-// while keeping the saved sound choice for next time.
+// Browsers only let audio start under a user gesture. The routine now runs by
+// itself (no nightly tap), so when a scheduled sound or chime is blocked we
+// raise one flag; the kid screen shows a tiny dim speaker badge and the next
+// tap anywhere unlocks both players and retries the pending sound.
+const needsAudioUnlock = ref(false)
+let pendingSound: AmbientSoundId | null = null
+
+const isSleepPhase = (state: LightState): boolean => state === 'bedtime' || state === 'night'
+
+const startAmbient = async (id: AmbientSoundId): Promise<void> => {
+  if (!(await ambient.selectSound(id))) {
+    pendingSound = id
+    needsAudioUnlock.value = true
+  }
+}
+
+const autoStartAmbient = (): void => {
+  const saved = settings.value.ambientSound
+  if (settings.value.ambientAutoStart && saved) {
+    void startAmbient(saved)
+  }
+}
+
+// Must run synchronously inside the gesture: both prime() calls start before
+// any await.
+const primeAudio = async (): Promise<boolean> => {
+  const [chimeOk, ambientOk] = await Promise.all([chime.prime(), ambient.prime()])
+  return chimeOk && ambientOk
+}
+
+const unlockAudio = async (): Promise<void> => {
+  if (!needsAudioUnlock.value) {
+    return
+  }
+  const unlocked = await primeAudio()
+  const retry = pendingSound
+  pendingSound = null
+  if (retry && isSleepPhase(currentState.value)) {
+    await startAmbient(retry)
+  }
+  needsAudioUnlock.value = !unlocked || pendingSound !== null
+}
+
+// Story time (or lights-out with no wind-down, a manual start, or a nap)
+// starts the saved sound; morning and "off for now" stop it.
+watch(currentState, (state, previous) => {
+  if (
+    (state === 'bedtime' && previous !== 'bedtime')
+    || (state === 'night' && !isSleepPhase(previous))
+  ) {
+    autoStartAmbient()
+  }
+
+  if (state === 'awake' || (state === 'inactive' && previous !== 'awake')) {
+    pendingSound = null
+    if (isSoundPlaying.value) {
+      ambient.stopPlayback()
+    }
+  }
+
+  // Sound the chime only when the routine crosses into "okay to get up" from
+  // an earlier lit phase. Reloads into an already-green morning don't chime.
+  if (state === 'awake' && (previous === 'night' || previous === 'wake')) {
+    void chime.play().then(played => {
+      if (!played) {
+        needsAudioUnlock.value = true
+      }
+    })
+  }
+})
+
+// Turning the chime on is a tap, so try to unlock right away.
+watch(() => settings.value.chimeEnabled, enabled => {
+  if (enabled) {
+    void chime.prime().then(ok => {
+      if (!ok) {
+        needsAudioUnlock.value = true
+      }
+    })
+  }
+})
+
+// "Start now" / "Off for now". Starting is a guaranteed gesture, so unlock
+// audio there too.
 const handleToggleNightLight = () => {
   dismissFirstRunHint()
-  if (!isActive.value) {
-    chime.prime()
-    ambient.prime()
+  if (isLit.value) {
+    turnOffForNow()
   } else {
-    ambient.stopPlayback()
+    void primeAudio()
+    startNow()
   }
-  toggleNightLight()
+}
+
+const handleStartNap = (minutes: number) => {
+  dismissFirstRunHint()
+  void primeAudio()
+  updateLastNapMinutes(minutes)
+  startNap(minutes)
 }
 
 // Main-screen speaker button: start the saved sound (this tap unlocks audio) or
@@ -179,23 +287,16 @@ const handleToggleSound = () => {
   if (isSoundPlaying.value) {
     ambient.stopPlayback()
   } else if (settings.value.ambientSound) {
-    ambient.prime()
-    void ambient.selectSound(settings.value.ambientSound)
+    void ambient.prime()
+    void startAmbient(settings.value.ambientSound)
   }
 }
 
-// Sound the chime only when the schedule autonomously crosses into "okay to get
-// up" from an active earlier state. Restores (inactive → awake) and turning on
-// into an already-awake window don't chime.
-watch(currentState, (state, previous) => {
-  if (
-    state === 'awake'
-    && (previous === 'night' || previous === 'wake')
-    && isActive.value
-  ) {
-    chime.play()
-  }
-})
+// Interim: the single wake-time field edits every day (replaced by the
+// schedule editor).
+const handleUpdateWakeTime = (time: string) => {
+  updateSchedule(buildSameSchedule({ wakeTime: time, bedtime: settings.value.schedule[0].bedtime }))
+}
 
 // Closing settings always ends any active preview so the light never gets
 // stuck overriding the real schedule after the panel is dismissed.
@@ -236,14 +337,36 @@ const handleContextMenu = (event: Event) => {
   event.preventDefault()
 }
 
+const handleUnlockGesture = () => {
+  void unlockAudio()
+}
+
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown)
   document.addEventListener('contextmenu', handleContextMenu)
+  document.addEventListener('pointerdown', handleUnlockGesture, true)
+  document.addEventListener('keydown', handleUnlockGesture, true)
+
+  // A reload mid-routine: try to resume the bedtime sound and pre-unlock the
+  // chime. Without a gesture these usually come back blocked, which raises the
+  // unlock badge so one tap restores both.
+  if (isSleepPhase(currentState.value)) {
+    autoStartAmbient()
+  }
+  if (settings.value.chimeEnabled && isArmed.value) {
+    void chime.prime().then(ok => {
+      if (!ok) {
+        needsAudioUnlock.value = true
+      }
+    })
+  }
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleKeyDown)
   document.removeEventListener('contextmenu', handleContextMenu)
+  document.removeEventListener('pointerdown', handleUnlockGesture, true)
+  document.removeEventListener('keydown', handleUnlockGesture, true)
 })
 </script>
 

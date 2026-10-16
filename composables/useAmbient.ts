@@ -10,8 +10,9 @@ import { useSettings } from './useSettings'
 //
 // Persistence split: `settings.ambientSound` is the last-selected sound (the
 // picker highlight, survives reload); `activeSoundId`/`isPlaying` are the live
-// runtime state. We never auto-start audio on reload — playback needs a fresh
-// user gesture, and auto-sound on a bedside reload would be jarring.
+// runtime state. Story time can auto-start the saved sound (wired in
+// pages/index.vue); when the browser blocks that without a gesture, play()
+// resolves false and the page asks for one tap.
 
 const SLEEP_FADE_SECONDS = 25
 
@@ -93,19 +94,22 @@ export const useAmbient = () => {
     })
   }
 
-  // Call inside a user gesture (the Turn On tap) so a later programmatic
-  // operation stays unlocked. Applies the current volume.
-  const prime = (): void => {
-    void player.prime()
+  // Call inside a user gesture so a later programmatic operation stays
+  // unlocked. Applies the current volume. False = still blocked.
+  const prime = (): Promise<boolean> => {
+    const unlocked = player.prime()
     player.setVolume(settings.settings.value.ambientVolume / 100)
+    return unlocked
   }
 
-  const selectSound = async (id: AmbientSoundId): Promise<void> => {
+  // Resolves false when audio is blocked pending a user gesture.
+  const selectSound = async (id: AmbientSoundId): Promise<boolean> => {
     settings.updateAmbientSound(id)
-    await player.play(id)
+    const unlocked = await player.play(id)
     activeSoundId.value = id
     isPlaying.value = player.isPlaying()
     armSleepTimer(settings.settings.value.sleepTimerMinutes)
+    return unlocked
   }
 
   // Stop playback but keep the saved selection (used when the light is turned

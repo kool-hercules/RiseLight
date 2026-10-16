@@ -52,7 +52,7 @@ describe('chime player unlock state machine', () => {
     const player = createChimePlayer(() => ctx as never)
 
     expect(player.isPrimed()).toBe(false)
-    await player.prime()
+    await expect(player.prime()).resolves.toBe(true)
 
     expect(ctx.resume).toHaveBeenCalledTimes(1)
     expect(player.isPrimed()).toBe(true)
@@ -84,8 +84,9 @@ describe('chime player unlock state machine', () => {
   it('no-ops without throwing when Web Audio is unavailable', async () => {
     const player = createChimePlayer(() => null)
 
-    await expect(player.prime()).resolves.toBeUndefined()
-    await expect(player.play()).resolves.toBeUndefined()
+    // Nothing to unlock, so never ask for a tap.
+    await expect(player.prime()).resolves.toBe(true)
+    await expect(player.play()).resolves.toBe(true)
     expect(player.isPrimed()).toBe(false)
   })
 
@@ -96,8 +97,18 @@ describe('chime player unlock state machine', () => {
     })
     const player = createChimePlayer(() => ctx as never)
 
-    await player.play()
-    expect(ctx.oscillators).toHaveLength(0)
+    await expect(player.play()).resolves.toBe(false)
+    await expect(player.prime()).resolves.toBe(false)
+    // prime() still schedules its silent blip; play() never sounds.
+    expect(ctx.oscillators).toHaveLength(1)
+  })
+
+  it('reports blocked when resume() never settles without a gesture', async () => {
+    const ctx = new FakeAudioContext('suspended')
+    ctx.resume = vi.fn(() => new Promise<void>(() => {}))
+    const player = createChimePlayer(() => ctx as never)
+
+    await expect(player.play()).resolves.toBe(false)
   })
 
   it('closes and resets on dispose', async () => {

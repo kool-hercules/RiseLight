@@ -6,6 +6,8 @@
 // seconds:
 //
 //   ?clock=06:29          start the simulated clock at 06:29 local (real speed)
+//   ?clock=2026-10-17T05:50  …or at a full local date and time (to test a
+//                         specific weekday's schedule row)
 //   ?clock=06:29&rate=120 …and run 120× faster, so a 30-min window elapses in 15s
 //   ?rate=600             keep the real start time but fast-forward 600×
 //
@@ -30,10 +32,24 @@ const parseRate = (raw: string | null): number => {
 }
 
 // Resolve the simulated wall-clock time at t0. A bare `clock` (or `clock=now`)
-// anchors to the real moment; `HH:MM` anchors to that time on the real "today".
+// anchors to the real moment; `HH:MM` anchors to that time on the real "today";
+// `YYYY-MM-DDTHH:MM` anchors to that local date and time.
 const parseStart = (raw: string | null, originMs: number): number => {
   if (raw === null || raw === '' || raw === 'now') {
     return originMs
+  }
+
+  const full = /^(\d{4})-(\d{2})-(\d{2})T(\d{1,2}):(\d{2})$/.exec(raw)
+  if (full) {
+    const [year, month, day, hours, minutes] = full.slice(1).map(Number)
+    const start = new Date(year, month - 1, day, hours, minutes, 0, 0)
+    // Reject rollovers like 2026-02-31 or 25:00.
+    const valid = start.getFullYear() === year
+      && start.getMonth() === month - 1
+      && start.getDate() === day
+      && hours <= 23
+      && minutes <= 59
+    return valid ? start.getTime() : originMs
   }
 
   const match = /^(\d{1,2}):(\d{2})$/.exec(raw)

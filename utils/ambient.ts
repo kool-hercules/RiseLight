@@ -17,6 +17,11 @@
 
 import type { AmbientSoundId } from '../types'
 
+const RESUME_TIMEOUT_MS = 400
+
+export const resumeTimeout = (): Promise<void> =>
+  new Promise(resolve => setTimeout(resolve, RESUME_TIMEOUT_MS))
+
 // A wider view of AudioContext than the chime needs. Kept local so the chime's
 // narrow type (and its test fake) stay untouched.
 export type AmbientAudioContext = Pick<
@@ -55,9 +60,12 @@ export const defaultAmbientContextFactory: AmbientContextFactory = () => {
   }
 }
 
+// prime()/play() resolve false only when audio is blocked pending a user
+// gesture (the context exists but isn't running), so the caller can ask for a
+// tap. With no Web Audio at all there is nothing to unlock, so they resolve true.
 export interface AmbientPlayer {
-  prime: () => Promise<void>
-  play: (id: AmbientSoundId) => Promise<void>
+  prime: () => Promise<boolean>
+  play: (id: AmbientSoundId) => Promise<boolean>
   stop: () => Promise<void>
   setVolume: (volume: number) => void
   fadeOutAndStop: (seconds: number) => Promise<void>
@@ -280,7 +288,9 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
   const resumeIfNeeded = async (ctx: AmbientAudioContext): Promise<void> => {
     if (ctx.state === 'suspended') {
       try {
-        await ctx.resume()
+        // Without a user gesture some browsers leave resume() pending forever,
+        // so don't wait on it indefinitely.
+        await Promise.race([ctx.resume(), resumeTimeout()])
       } catch {
         // Autoplay still blocked — callers check state before scheduling.
       }
@@ -459,29 +469,30 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
     }
   }
 
-  const prime = async (): Promise<void> => {
+  const prime = async (): Promise<boolean> => {
     const ctx = ensureContext()
     if (!ctx) {
-      return
+      return true
     }
     await resumeIfNeeded(ctx)
     ensureMaster(ctx)
+    return ctx.state === 'running'
   }
 
-  const play = async (id: AmbientSoundId): Promise<void> => {
+  const play = async (id: AmbientSoundId): Promise<boolean> => {
     const ctx = ensureContext()
     if (!ctx) {
-      return
+      return true
     }
 
     const token = ++playToken
     await resumeIfNeeded(ctx)
     if (ctx.state !== 'running') {
-      return
+      return false
     }
     // A newer play()/stop() superseded us while awaiting the resume.
     if (token !== playToken) {
-      return
+      return true
     }
 
     const master = ensureMaster(ctx)
@@ -494,12 +505,12 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
       try {
         const buffer = await loadBuffer(ctx, url)
         if (token !== playToken) {
-          return
+          return true
         }
         voice = startBufferVoice(ctx, master, buffer, 0.8)
       } catch {
         if (token !== playToken) {
-          return
+          return true
         }
         voice = buildSynthVoice(ctx, master, id)
       }
@@ -511,6 +522,7 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
       stopVoice(ctx, current.voice, 0.04)
     }
     current = { id, voice }
+    return true
   }
 
   const stop = async (): Promise<void> => {
