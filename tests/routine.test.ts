@@ -164,6 +164,15 @@ describe('overrides: on', () => {
     const on: Override = { kind: 'on', start: at(17, 6, 40).getTime() }
     expect(stateAt(at(17, 6, 41), settings, on)).toBe('wake')
   })
+
+  it('started mid-ramp keeps the ramp where it is instead of restarting it from red', () => {
+    const settings = makeSettings({ autoSchedule: false })
+    const on: Override = { kind: 'on', start: at(17, 6, 45).getTime() }
+    const phase = resolvePhase(at(17, 6, 45), settings, on)
+    expect(phase.state).toBe('wake')
+    expect(phase.progress).toBeCloseTo(0.5)
+    expect(phase.phaseStart).toBe(at(17, 6, 30).getTime())
+  })
 })
 
 describe('overrides: nap', () => {

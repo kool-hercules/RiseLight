@@ -153,12 +153,13 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
   switch (override.kind) {
     case 'on': {
       // Night until the next wake whose window hasn't already ended (so starting
-      // mid-window shows "almost time", not a whole extra night).
+      // mid-window shows "almost time", not a whole extra night). The ramp keeps
+      // its real start, so starting mid-window picks it up where it is.
       const wakeAt = firstWake(override.start, settings, wake => wake + durationMs > override.start)
       const okayAt = wakeAt + durationMs
       return [
         { state: 'night', start: override.start, end: Math.max(override.start, wakeAt) },
-        { state: 'wake', start: Math.max(override.start, wakeAt), end: okayAt },
+        { state: 'wake', start: wakeAt, end: okayAt },
         { state: 'awake', start: okayAt, end: okayAt + holdMs }
       ]
     }
