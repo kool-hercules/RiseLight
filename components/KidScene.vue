@@ -60,16 +60,16 @@ const sunY = computed(() => HORIZON + 30 - 120 * p.value)
         </clipPath>
         <!-- Ground fades out at the picture's edges so it melts into the glow
              instead of ending in a hard-edged box. -->
-        <radialGradient id="kid-ground-fade-gradient" cx="200" cy="240" r="200" gradientUnits="userSpaceOnUse">
+        <radialGradient id="kid-ground-fade-gradient" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(200 236) scale(195 66)">
           <stop offset="0.3" stop-color="white" />
           <stop offset="1" stop-color="black" />
         </radialGradient>
         <mask id="kid-ground-fade">
-          <rect x="0" y="0" width="400" height="300" fill="url(#kid-ground-fade-gradient)" />
+          <rect x="0" y="0" width="400" height="300" fill="url(#kid-ground-fade-gradient)" stroke="none" />
         </mask>
         <mask id="kid-crescent">
-          <rect x="0" y="0" width="400" height="300" fill="white" />
-          <circle :cx="moon.x + 11" :cy="moon.y - 7" r="22" fill="black" />
+          <rect x="0" y="0" width="400" height="300" fill="white" stroke="none" />
+          <circle :cx="moon.x + 11" :cy="moon.y - 7" r="22" fill="black" stroke="none" />
         </mask>
       </defs>
 
