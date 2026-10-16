@@ -29,8 +29,12 @@
       :active-sound-id="activeSoundId"
       :is-sound-playing="isSoundPlaying"
       @close="closeSettings"
-      @update-wake-time="handleUpdateWakeTime"
+      @update-schedule="updateSchedule"
+      @update-day="updateDaySchedule"
       @update-wake-duration="updateWakeDuration"
+      @update-wind-down="updateWindDownMinutes"
+      @update-awake-hold="updateAwakeHoldMinutes"
+      @update-toggle="updateToggle"
       @update-brightness="updateBrightness"
       @update-color="updateColor"
       @update-chime="updateChimeEnabled"
@@ -65,7 +69,6 @@ import { useChime } from '../composables/useChime'
 import { useAmbient } from '../composables/useAmbient'
 import { useWakeAlarm } from '../composables/useWakeAlarm'
 import { MODE_PRESENTATION } from '../utils/modes'
-import { buildSameSchedule } from '../utils/settings'
 import { formatClockTime } from '../utils/time'
 
 const {
@@ -74,7 +77,11 @@ const {
   saveFailed,
   toggleSettings,
   updateSchedule,
+  updateDaySchedule,
   updateWakeDuration,
+  updateWindDownMinutes,
+  updateAwakeHoldMinutes,
+  updateToggle,
   updateBrightness,
   updateColor,
   updateChimeEnabled,
@@ -290,12 +297,6 @@ const handleToggleSound = () => {
     void ambient.prime()
     void startAmbient(settings.value.ambientSound)
   }
-}
-
-// Interim: the single wake-time field edits every day (replaced by the
-// schedule editor).
-const handleUpdateWakeTime = (time: string) => {
-  updateSchedule(buildSameSchedule({ wakeTime: time, bedtime: settings.value.schedule[0].bedtime }))
 }
 
 // Closing settings always ends any active preview so the light never gets
