@@ -1,7 +1,7 @@
 import type { LightState } from '../types'
 import type { Override } from './routine'
 import type { StorageLike } from './settings'
-import { isValidNapMinutes } from './settings'
+import { isRecord, isValidNapMinutes } from './settings'
 
 export const OVERRIDE_STORAGE_KEY = 'riselight-override'
 export const OVERRIDE_SCHEMA_VERSION = 1 as const
@@ -9,7 +9,6 @@ export const OVERRIDE_SCHEMA_VERSION = 1 as const
 // The pre-routine "Turn On" session. A valid one is migrated once into an `on`
 // override so a light that was on before the update stays on after it.
 export const LEGACY_SESSION_STORAGE_KEY = 'nightlight-active-session'
-const LEGACY_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const LEGACY_MAX_FUTURE_MS = 26 * 60 * 60 * 1000
 
 type StoredOverrideV1 = {
@@ -18,11 +17,6 @@ type StoredOverrideV1 = {
 }
 
 const LIGHT_STATES: readonly LightState[] = ['inactive', 'bedtime', 'night', 'wake', 'awake']
-
-type UnknownRecord = Record<string, unknown>
-
-const isRecord = (value: unknown): value is UnknownRecord =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value)
@@ -74,7 +68,7 @@ export const saveOverride = (storage: StorageLike | null, override: Override | n
   }
 }
 
-// One-time: a still-relevant legacy session becomes `{kind: 'on', start: now}`
+// One-time: a still-pending legacy session becomes `{kind: 'on', start: now}`
 // (the routine engine re-derives the rest). The legacy key is always removed.
 const migrateLegacySession = (storage: StorageLike, now: Date): Override | null => {
   let raw: string | null = null
@@ -95,7 +89,9 @@ const migrateLegacySession = (storage: StorageLike, now: Date): Override | null 
       return null
     }
     const nowMs = now.getTime()
-    if (parsed.wakeAt < nowMs - LEGACY_MAX_AGE_MS || parsed.wakeAt > nowMs + LEGACY_MAX_FUTURE_MS) {
+    // Only a session whose wake is still ahead. Old sessions stayed stored past
+    // their wake until Stop; relighting one would show "stay in bed" all day.
+    if (parsed.wakeAt <= nowMs || parsed.wakeAt > nowMs + LEGACY_MAX_FUTURE_MS) {
       return null
     }
   } catch {

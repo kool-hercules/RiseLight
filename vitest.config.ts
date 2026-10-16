@@ -4,8 +4,4 @@ import { defineConfig } from 'vitest/config'
 // cases really exercise DST, whatever zone the machine runs in.
 process.env.TZ = 'America/New_York'
 
-export default defineConfig({
-  test: {
-    env: { TZ: 'America/New_York' }
-  }
-})
+export default defineConfig({})

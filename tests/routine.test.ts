@@ -199,6 +199,16 @@ describe('overrides: nap', () => {
     expect(stateAt(at(16, 19, 18), settings, intoStoryTime)).toBe('night')
     expect(stateAt(at(16, 19, 20), settings, intoStoryTime)).toBe('bedtime')
   })
+
+  it('a nap whose green tail would reach story time shows no ramp and no green', () => {
+    // Story time starts 19:10; the nap ends 19:00, so 15 min of green would overlap it.
+    const settings = makeSettings()
+    const nap: Override = { kind: 'nap', start: at(16, 17).getTime(), minutes: 120 }
+    expect(stateAt(at(16, 18, 58), settings, nap)).toBe('night')
+    expect(overrideEnd(nap, settings)).toBe(at(16, 19).getTime())
+    expect(stateAt(at(16, 19, 5), settings, nap)).toBe('inactive')
+    expect(stateAt(at(16, 19, 10), settings, nap)).toBe('bedtime')
+  })
 })
 
 describe('overrides: off', () => {
@@ -227,6 +237,19 @@ describe('overrides: off', () => {
     expect(overrideEnd(fromAwake, settings)).toBe(at(17, 8).getTime())
     // Tonight's routine is untouched.
     expect(stateAt(at(17, 19, 15), settings, fromAwake)).toBe('bedtime')
+  })
+
+  it('during awake: never runs past tonight’s story time', () => {
+    const settings = makeSettings({
+      schedule: createDefaultSchedule('12:00', '15:00'),
+      wakeDuration: 60,
+      awakeHoldMinutes: 240,
+      windDownMinutes: 60
+    })
+    const off: Override = { kind: 'off', start: at(17, 13, 30).getTime(), fromPhase: 'awake' }
+    expect(stateAt(at(17, 13, 59), settings, off)).toBe('inactive')
+    expect(overrideEnd(off, settings)).toBe(at(17, 14).getTime())
+    expect(stateAt(at(17, 14), settings, off)).toBe('bedtime')
   })
 
   it('pressed while inactive is a no-op (never active)', () => {

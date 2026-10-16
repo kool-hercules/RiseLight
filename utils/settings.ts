@@ -73,7 +73,7 @@ export const createDefaultSettings = (): Settings => ({
   }
 })
 
-const isRecord = (value: unknown): value is UnknownRecord => {
+export const isRecord = (value: unknown): value is UnknownRecord => {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 

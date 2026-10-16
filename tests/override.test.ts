@@ -66,6 +66,13 @@ describe('legacy active-session migration', () => {
     expect(readOverride(stale, now)).toBeNull()
     expect(stale.getItem(LEGACY_SESSION_STORAGE_KEY)).toBeNull()
 
+    // Old sessions stayed stored past their wake until Stop: don't relight them.
+    const pastWake = new MemoryStorage({
+      [LEGACY_SESSION_STORAGE_KEY]: JSON.stringify({ version: 1, wakeAt: now.getTime() - 60_000 })
+    })
+    expect(readOverride(pastWake, now)).toBeNull()
+    expect(pastWake.getItem(LEGACY_SESSION_STORAGE_KEY)).toBeNull()
+
     const malformed = new MemoryStorage({ [LEGACY_SESSION_STORAGE_KEY]: '{nope' })
     expect(readOverride(malformed, now)).toBeNull()
     expect(malformed.getItem(LEGACY_SESSION_STORAGE_KEY)).toBeNull()

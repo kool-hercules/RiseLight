@@ -10,8 +10,9 @@ import type { NightLightRuntime } from './useNightLight'
 // This is a native-only capability (the reason to ship the Capacitor shell); on
 // the web PWA every method is a silent no-op, so the same code runs everywhere.
 //
-// Re-synced whenever settings or the override change, and when the app returns
-// to the foreground. The chime toggle decides whether they make a sound: off
+// Re-synced whenever settings or the override change, when the app returns
+// to the foreground, and once the earliest scheduled alarm has passed (so a
+// device left on screen for days never runs out of alarms). The chime toggle decides whether they make a sound: off
 // still posts the notification, just silently.
 
 // Android 8+ takes sound from the channel, so keep one audible and one quiet.
@@ -72,6 +73,8 @@ export const useWakeAlarm = (
 
   // Serialize syncs so overlapping triggers can't interleave cancel/schedule.
   let syncing: Promise<void> = Promise.resolve()
+  // The earliest alarm in the last plan; once the clock passes it, top up.
+  let resyncAfter = Infinity
 
   const syncNow = async (): Promise<void> => {
     if (!isNative) {
@@ -80,6 +83,7 @@ export const useWakeAlarm = (
 
     // Use the runtime clock so a dev clock is honored consistently.
     const plan = planAlarms(runtime.currentTime.value, settings.value, runtime.override.value)
+    resyncAfter = plan.length > 0 ? Math.min(...plan.map(({ at }) => at.getTime())) : Infinity
     await cancel()
     if (plan.length === 0 || !(await ensurePermission())) {
       return
@@ -120,6 +124,16 @@ export const useWakeAlarm = (
     [() => runtime.override.value, alarmKey],
     () => void sync(),
     { immediate: true }
+  )
+
+  watch(
+    () => runtime.currentTime.value.getTime() > resyncAfter,
+    passed => {
+      if (passed) {
+        resyncAfter = Infinity
+        void sync()
+      }
+    }
   )
 
   const handleVisibility = (): void => {

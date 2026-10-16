@@ -8,7 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "test": "TZ=America/New_York vitest run",
+    "test": "vitest run",
     "typecheck": "nuxt typecheck",
     "build:native": "nuxt generate && cap sync",
     "cap:sync": "cap sync",

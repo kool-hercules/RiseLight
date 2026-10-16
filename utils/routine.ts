@@ -129,6 +129,21 @@ const firstWake = (after: number, settings: Settings, keep: (wakeAt: number) => 
   return after
 }
 
+// The first scheduled story-time start after `after`, or Infinity when the
+// schedule isn't running. Overrides that end in daytime must not spill into it.
+const nextWindStart = (after: number, settings: Settings): number => {
+  if (!settings.autoSchedule) {
+    return Infinity
+  }
+  for (let offset = 0; offset <= 2; offset++) {
+    const windStart = nightOf(dayStart(after, offset), settings).windStart
+    if (windStart > after) {
+      return windStart
+    }
+  }
+  return Infinity
+}
+
 // An override's own segments, derived from the *current* settings so editing
 // the schedule moves it. Empty means the override has nothing to show.
 const overrideSegments = (override: Override, settings: Settings): Segment[] => {
@@ -150,9 +165,14 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
     case 'nap': {
       const end = override.start + override.minutes * MINUTE
       const baseAtEnd = resolveBase(end, settings).segment?.state
-      // A nap that runs into the evening routine never shows green: stay dark
-      // until it ends and hand straight back to the schedule.
-      if (baseAtEnd === 'bedtime' || baseAtEnd === 'night') {
+      // A nap that runs into the evening routine — or whose 15-minute green
+      // tail would — never shows green: stay dark until it ends and hand
+      // straight back to the schedule.
+      if (
+        baseAtEnd === 'bedtime'
+        || baseAtEnd === 'night'
+        || (baseAtEnd === undefined && nextWindStart(end, settings) < end + NAP_AWAKE_MS)
+      ) {
         return [{ state: 'night', start: override.start, end }]
       }
       const rampStart = Math.max(override.start, end - Math.min(settings.wakeDuration, 5) * MINUTE)
@@ -168,19 +188,26 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
         // Dark until the next wake ramp, so the morning cue still happens.
         end = firstWake(override.start, settings, wake => wake > override.start)
       } else if (override.fromPhase === 'wake' || override.fromPhase === 'awake') {
-        // Dark until the morning's hold would have ended (daytime idle).
+        // Dark until the morning's hold would have ended (daytime idle), but
+        // never past tonight's story time, which must still start on time.
         const tail = durationMs + holdMs
-        end = firstWake(override.start, settings, wake => wake + tail > override.start) + tail
+        end = Math.min(
+          firstWake(override.start, settings, wake => wake + tail > override.start) + tail,
+          nextWindStart(override.start, settings)
+        )
       }
       return end > override.start ? [{ state: 'inactive', start: override.start, end }] : []
     }
   }
 }
 
-export const overrideEnd = (override: Override, settings: Settings): number => {
-  const segments = overrideSegments(override, settings).filter(segment => segment.end > segment.start)
-  return segments.length > 0 ? segments[segments.length - 1].end : override.start
+const endOfSegments = (override: Override, segments: Segment[]): number => {
+  const shown = segments.filter(segment => segment.end > segment.start)
+  return shown.length > 0 ? shown[shown.length - 1].end : override.start
 }
+
+export const overrideEnd = (override: Override, settings: Settings): number =>
+  endOfSegments(override, overrideSegments(override, settings))
 
 // Active iff it has started and its derived end is still ahead.
 export const isOverrideActive = (override: Override | null, at: number, settings: Settings): override is Override =>
@@ -191,8 +218,9 @@ export const resolvePhase = (now: Date, settings: Settings, override: Override |
   const basePhase = resolveBase(at, settings)
   const base: LightState = basePhase.segment?.state ?? 'inactive'
 
-  if (isOverrideActive(override, at, settings)) {
-    const segments = overrideSegments(override, settings)
+  const segments = override && override.start <= at ? overrideSegments(override, settings) : []
+  const end = override ? endOfSegments(override, segments) : null
+  if (override && end !== null && at < end) {
     const segment = findSegment(segments, at)
     if (segment) {
       const okay = segments.find(candidate => candidate.state === 'awake')
@@ -203,7 +231,7 @@ export const resolvePhase = (now: Date, settings: Settings, override: Override |
         progress: progressOf(segment.start, segment.end, at),
         base,
         override,
-        overrideEnd: overrideEnd(override, settings),
+        overrideEnd: end,
         okayAt: override.kind === 'off'
           ? basePhase.night?.okayAt ?? null
           : okay?.start ?? null
