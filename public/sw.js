@@ -14,7 +14,7 @@
 //
 // The cache is versioned; bump CACHE_VERSION to invalidate on a shell change.
 
-const CACHE_VERSION = 'riselight-v2'
+const CACHE_VERSION = 'riselight-v3'
 const FINGERPRINTED = /^\/_nuxt\/[\w.-]+\.(?:js|css)$/
 const SHELL_URLS = [
   '/',
@@ -46,6 +46,32 @@ self.addEventListener('activate', event => {
   )
 })
 
+// The page loads its build files before this worker controls it, so they'd
+// only be cached on the *next* visit. The page posts the ones it loaded (see
+// plugins/pwa.client.ts) so a single online visit is enough to launch offline.
+self.addEventListener('message', event => {
+  const data = event.data
+  if (!data || data.type !== 'cache-urls' || !Array.isArray(data.urls)) {
+    return
+  }
+  const urls = data.urls.filter(href => {
+    try {
+      const url = new URL(href, self.location.origin)
+      return url.origin === self.location.origin && FINGERPRINTED.test(url.pathname) && !url.search
+    } catch {
+      return false
+    }
+  })
+  event.waitUntil(
+    caches
+      .open(CACHE_VERSION)
+      .then(cache => cache.addAll(urls))
+      .catch(() => {
+        // Best effort; runtime caching still fills in on the next load.
+      })
+  )
+})
+
 self.addEventListener('fetch', event => {
   const { request } = event
   if (request.method !== 'GET') {
@@ -62,8 +88,12 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(request)
         .then(response => {
-          const copy = response.clone()
-          caches.open(CACHE_VERSION).then(cache => cache.put('/', copy))
+          // Only a real, direct 200 may become the offline shell: a 404/5xx or
+          // a captive-portal redirect would otherwise replace the app.
+          if (response.ok && !response.redirected) {
+            const copy = response.clone()
+            caches.open(CACHE_VERSION).then(cache => cache.put('/', copy))
+          }
           return response
         })
         .catch(() => caches.match('/').then(cached => cached ?? caches.match(request)))
