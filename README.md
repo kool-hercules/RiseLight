@@ -14,23 +14,27 @@ like the Hatch. Built with Vue 3 + Nuxt 3, installable as a PWA.
     window.
   - **Okay to get up!**: a gentle green, held for a set time, then the screen
     goes quiet (near-black, dim clock) for the day.
-- **Weekly schedule**: bedtime and wake-up per day, with "Same every day",
-  "Weekdays & weekends" and "Custom" presets.
+- **Weekly schedule**: bedtime and sunrise start per day, with "Same every
+  day", "Weekdays & weekends" and "Custom" presets. The editor shows when each
+  morning turns green.
 - **One-tap nap**: night → short sunrise → 15 minutes of green. A nap that runs
   into the evening routine hands straight back to it with no green.
 - **Off for now / Start now**: switch off until the routine's next step (the
-  morning cue still comes), or start the night early.
+  morning cue still comes), or start the night early. Start now right after
+  Off for now is an undo: the schedule carries on where it was.
 - **Kid-first screen with a child lock**: the kid screen is purely visual -- a
   glow and a simple scene (lamp and book, moon and sleeping friend, sun rising
   over hills, full sun) painted only in the current light colour. Parent
   controls open by holding the clock for 3 seconds and hide themselves again.
+  They carry quick brightness and volume sliders for 2 AM adjustments.
 - **Ambient sounds**: white / pink / brown noise plus rain, ocean, fan, wind,
   and a soft heartbeat, all **synthesized in the browser** (no audio files,
   perfect infinite loops, fully offline), with volume and a fading **sleep
   timer**. Optionally starts by itself at story time and stops at "okay to get
   up".
 - **Okay-to-get-up chime**: an optional gentle chime at the wake transition.
-- **Installable PWA**: add to home screen, runs full-screen and **offline**.
+- **Installable PWA**: add to home screen, runs full-screen and **offline**
+  after a single online visit.
 - **Stays awake**: holds a screen wake lock while the routine is armed, and
   warns if the browser can't.
 - **Customizable**: per-phase colour and brightness with a live full-screen
@@ -38,7 +42,8 @@ like the Hatch. Built with Vue 3 + Nuxt 3, installable as a PWA.
 
 ## How it works
 
-1. Set bedtimes and wake-up times (and optionally a sound) in settings.
+1. Set bedtimes and sunrise times (and optionally a sound) in settings. Green
+   ("okay to get up") comes one wake-up window after the sunrise starts.
 2. Leave RiseLight open, on screen and plugged in by the bed. It runs story
    time → stay in bed → almost time → okay to get up every day on its own.
 3. To open the parent controls, **hold the clock for 3 seconds** (or turn the
@@ -66,7 +71,8 @@ QA tips:
 - `?clock=2026-10-17T05:50` starts at a full local date and time, to test a
   specific weekday's schedule row (e.g. a Saturday wake-up).
 - `?clock=2026-10-16T19:05&rate=240` walks a whole evening: story time → night.
-- Fresh `localStorage` shows the first-run parent controls pinned open.
+- Fresh `localStorage` shows the first-run parent controls pinned open; left
+  untouched they hand back to the kid screen after two minutes.
 - `npm test` pins `TZ=America/New_York` so the DST cases really cross DST.
 
 ## Technical details
