@@ -27,7 +27,7 @@
       :active-sound-id="activeSoundId"
       :is-sound-playing="isSoundPlaying"
       @close="closeSettings"
-      @update-wake-time="updateWakeTime"
+      @update-wake-time="time => updateSchedule(buildSameSchedule({ wakeTime: time, bedtime: settings.schedule[0].bedtime }))"
       @update-wake-duration="updateWakeDuration"
       @update-brightness="updateBrightness"
       @update-color="updateColor"
@@ -61,13 +61,14 @@ import { useChime } from '../composables/useChime'
 import { useAmbient } from '../composables/useAmbient'
 import { useWakeAlarm } from '../composables/useWakeAlarm'
 import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
+import { buildSameSchedule } from '../utils/settings'
 
 const {
   settings,
   isSettingsOpen,
   saveFailed,
   toggleSettings,
-  updateWakeTime,
+  updateSchedule,
   updateWakeDuration,
   updateBrightness,
   updateColor,

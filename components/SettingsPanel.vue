@@ -228,7 +228,7 @@ const confirmReset = () => {
           <label class="block text-sm font-medium mb-2">Wake-up time</label>
           <input
             type="time"
-            :value="settings.wakeTime"
+            :value="settings.schedule[0].wakeTime"
             @input="updateWakeTime"
             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >

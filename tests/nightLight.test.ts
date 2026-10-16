@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { describe, expect, it } from 'vitest'
 import { createNightLightRuntime } from '../composables/useNightLight'
-import { createDefaultSettings } from '../utils/settings'
+import { createDefaultSchedule, createDefaultSettings } from '../utils/settings'
 import { MemoryStorage } from './helpers/memoryStorage'
 
 class FakeClock {
@@ -93,7 +93,7 @@ describe('active settings updates', () => {
     const { clock, runtime, settings } = createRuntime(localDate(6, 0))
     runtime.startNightLight()
 
-    settings.value.wakeTime = '06:00'
+    settings.value.schedule = createDefaultSchedule('06:00')
     expect(runtime.currentState.value).toBe('wake')
     expect(runtime.nextWakeTime.value).toEqual(localDate(6, 0))
 
@@ -123,7 +123,7 @@ describe('active settings updates', () => {
 describe('human schedule labels', () => {
   it('derives almost-time and okay-to-get-up labels from settings even while off', () => {
     const { runtime, settings } = createRuntime(localDate(22, 0))
-    settings.value.wakeTime = '06:30'
+    settings.value.schedule = createDefaultSchedule('06:30')
     settings.value.wakeDuration = 30
 
     // Available without turning the light on, so "tonight's plan" can show them.
@@ -135,7 +135,7 @@ describe('human schedule labels', () => {
 
   it('rolls the okay-to-get-up label past the hour when the window crosses it', () => {
     const { runtime, settings } = createRuntime(localDate(22, 0))
-    settings.value.wakeTime = '06:45'
+    settings.value.schedule = createDefaultSchedule('06:45')
     settings.value.wakeDuration = 30
     expect(runtime.okayTimeLabel.value).toMatch(/7:15\s?AM/i)
     runtime.dispose()
@@ -143,7 +143,7 @@ describe('human schedule labels', () => {
 
   it('speaks the wake-window countdown in calm language', () => {
     const { clock, runtime, settings } = createRuntime(localDate(6, 30))
-    settings.value.wakeTime = '06:30'
+    settings.value.schedule = createDefaultSchedule('06:30')
     settings.value.wakeDuration = 30
     runtime.startNightLight()
 
@@ -158,7 +158,7 @@ describe('human schedule labels', () => {
 describe('sunrise ramp (display color/brightness)', () => {
   it('shows the exact night color/brightness at the window start with no seam', () => {
     const { runtime, settings } = createRuntime(localDate(5, 0))
-    settings.value.wakeTime = '06:30'
+    settings.value.schedule = createDefaultSchedule('06:30')
     settings.value.wakeDuration = 30
     runtime.startNightLight()
 
@@ -170,7 +170,7 @@ describe('sunrise ramp (display color/brightness)', () => {
 
   it('eases through the wake keyframe at the window midpoint', () => {
     const { clock, runtime, settings } = createRuntime(localDate(6, 30))
-    settings.value.wakeTime = '06:30'
+    settings.value.schedule = createDefaultSchedule('06:30')
     settings.value.wakeDuration = 30
     runtime.startNightLight()
 
@@ -186,7 +186,7 @@ describe('sunrise ramp (display color/brightness)', () => {
 
   it('lands on the awake color/brightness as the window closes', () => {
     const { clock, runtime, settings } = createRuntime(localDate(6, 30))
-    settings.value.wakeTime = '06:30'
+    settings.value.schedule = createDefaultSchedule('06:30')
     settings.value.wakeDuration = 30
     runtime.startNightLight()
 

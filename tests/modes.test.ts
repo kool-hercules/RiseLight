@@ -3,7 +3,7 @@ import { MODE_ORDER, MODE_PRESENTATION, stateHeadline, stateIcon } from '../util
 
 describe('mode presentation', () => {
   it('describes every mode in order with a label, blurb and icon', () => {
-    expect(MODE_ORDER).toEqual(['night', 'wake', 'awake'])
+    expect(MODE_ORDER).toEqual(['bedtime', 'night', 'wake', 'awake'])
 
     for (const mode of MODE_ORDER) {
       expect(MODE_PRESENTATION[mode].label.length).toBeGreaterThan(0)
@@ -20,5 +20,7 @@ describe('mode presentation', () => {
     expect(stateIcon('inactive')).toBe('power')
     expect(stateIcon('night')).toBe('moon')
     expect(stateIcon('wake')).toBe('sunrise')
+    expect(stateHeadline('bedtime')).toBe('Story time')
+    expect(stateIcon('bedtime')).toBe('book')
   })
 })

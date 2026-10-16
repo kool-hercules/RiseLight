@@ -92,7 +92,7 @@ export const createNightLightRuntime = (
     currentTime.value = new Date(startedAt.getTime())
     nextWakeTime.value = calculateNextWakeTime(
       startedAt,
-      settings.value.wakeTime,
+      settings.value.schedule[startedAt.getDay()].wakeTime,
       settings.value.wakeDuration
     )
     isActive.value = true
@@ -139,7 +139,7 @@ export const createNightLightRuntime = (
   }
 
   const stopSettingsWatcher = watch(
-    () => [settings.value.wakeTime, settings.value.wakeDuration] as const,
+    () => [settings.value.schedule[now().getDay()].wakeTime, settings.value.wakeDuration] as const,
     ([wakeTime], [previousWakeTime]) => {
       if (!isActive.value) {
         return
@@ -250,7 +250,7 @@ export const createNightLightRuntime = (
   // (the configured wake time) and when it becomes "okay to get up" (that time
   // plus the wake-up window). Uses the runtime clock so a dev/QA clock is honored.
   const scheduleAnchor = (extraMinutes: number): Date => {
-    const [hours, minutes] = settings.value.wakeTime.split(':').map(Number)
+    const [hours, minutes] = settings.value.schedule[now().getDay()].wakeTime.split(':').map(Number)
     const at = new Date(now().getTime())
     at.setHours(hours, minutes + extraMinutes, 0, 0)
     return at
