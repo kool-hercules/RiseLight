@@ -20,4 +20,4 @@ export const humanizeCountdown = (ms: number): string => {
 // One place that formats a clock time, so every surface (plan, details, status)
 // reads identically.
 export const formatClockTime = (date: Date): string =>
-  date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+  date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })

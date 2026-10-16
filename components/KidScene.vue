@@ -58,6 +58,15 @@ const sunY = computed(() => HORIZON + 30 - 120 * p.value)
         <clipPath id="kid-sky">
           <rect x="0" y="0" width="400" :height="HORIZON" />
         </clipPath>
+        <!-- Ground fades out at the picture's edges so it melts into the glow
+             instead of ending in a hard-edged box. -->
+        <radialGradient id="kid-ground-fade-gradient" cx="200" cy="240" r="200" gradientUnits="userSpaceOnUse">
+          <stop offset="0.3" stop-color="white" />
+          <stop offset="1" stop-color="black" />
+        </radialGradient>
+        <mask id="kid-ground-fade">
+          <rect x="0" y="0" width="400" height="300" fill="url(#kid-ground-fade-gradient)" />
+        </mask>
         <mask id="kid-crescent">
           <rect x="0" y="0" width="400" height="300" fill="white" />
           <circle :cx="moon.x + 11" :cy="moon.y - 7" r="22" fill="black" />
@@ -117,7 +126,8 @@ const sunY = computed(() => HORIZON + 30 - 120 * p.value)
             />
           </g>
         </g>
-        <path :d="`M0 ${HORIZON} C70 200 130 206 200 ${HORIZON} C270 206 330 200 400 ${HORIZON} V300 H0 Z`" fill="currentColor" fill-opacity="0.22" />
+        <path :d="`M0 ${HORIZON} C70 200 130 206 200 ${HORIZON} C270 206 330 200 400 ${HORIZON} V300 H0 Z`" fill="currentColor" fill-opacity="0.22" stroke="none" mask="url(#kid-ground-fade)" />
+        <path :d="`M0 ${HORIZON} C70 200 130 206 200 ${HORIZON} C270 206 330 200 400 ${HORIZON}`" mask="url(#kid-ground-fade)" />
       </g>
 
       <!-- Okay to get up: full sun, friend awake -->
@@ -131,7 +141,8 @@ const sunY = computed(() => HORIZON + 30 - 120 * p.value)
             d="M200 30 V14"
           />
         </g>
-        <path :d="`M0 ${HORIZON + 20} C90 220 310 220 400 ${HORIZON + 20} V300 H0 Z`" fill="currentColor" fill-opacity="0.18" />
+        <path :d="`M0 ${HORIZON + 20} C90 220 310 220 400 ${HORIZON + 20} V300 H0 Z`" fill="currentColor" fill-opacity="0.18" stroke="none" mask="url(#kid-ground-fade)" />
+        <path :d="`M0 ${HORIZON + 20} C90 220 310 220 400 ${HORIZON + 20}`" mask="url(#kid-ground-fade)" />
         <g class="kid-bounce">
           <circle cx="200" cy="196" r="22" fill="currentColor" fill-opacity="0.3" />
           <circle cx="192" cy="192" r="2.5" fill="currentColor" stroke="none" />
