@@ -5,12 +5,17 @@
 // Strategy:
 //   • Navigations → network-first, falling back to the cached shell. This keeps
 //     the app fresh when online but always launchable offline.
-//   • Same-origin GET assets (hashed JS/CSS, icons) → cache-first with a
-//     background refresh (stale-while-revalidate), since Nuxt fingerprints them.
+//   • Fingerprinted build assets (/_nuxt/<hash>.js|css) → cache-first with a
+//     background refresh (stale-while-revalidate); their names change on every
+//     build, so a cached copy is never wrong.
+//   • Everything else same-origin (icons, manifest, and un-fingerprinted dev
+//     modules) → network-first with a cache fallback. Serving those cache-first
+//     handed a dev server stale Vite modules and left the page blank.
 //
 // The cache is versioned; bump CACHE_VERSION to invalidate on a shell change.
 
-const CACHE_VERSION = 'riselight-v1'
+const CACHE_VERSION = 'riselight-v2'
+const FINGERPRINTED = /^\/_nuxt\/[\w.-]+\.(?:js|css)$/
 const SHELL_URLS = [
   '/',
   '/manifest.webmanifest',
@@ -66,17 +71,24 @@ self.addEventListener('fetch', event => {
     return
   }
 
-  // Static assets: serve from cache immediately, refresh in the background.
+  const store = response => {
+    if (response && response.status === 200) {
+      const copy = response.clone()
+      caches.open(CACHE_VERSION).then(cache => cache.put(request, copy))
+    }
+    return response
+  }
+
+  if (!FINGERPRINTED.test(url.pathname) || url.search) {
+    event.respondWith(fetch(request).then(store).catch(() => caches.match(request)))
+    return
+  }
+
+  // Fingerprinted assets: serve from cache immediately, refresh in the background.
   event.respondWith(
     caches.match(request).then(cached => {
       const network = fetch(request)
-        .then(response => {
-          if (response && response.status === 200) {
-            const copy = response.clone()
-            caches.open(CACHE_VERSION).then(cache => cache.put(request, copy))
-          }
-          return response
-        })
+        .then(store)
         .catch(() => cached)
       return cached ?? network
     })
