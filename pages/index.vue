@@ -3,22 +3,36 @@
     <NightLight
       :current-color="displayColor"
       :brightness="displayBrightness"
-      :is-active="isLit"
-      :current-state="currentState"
-      :preview-mode="previewMode"
-      :human-time-remaining="humanTimeRemaining"
-      :okay-to-rise-label="okayTimeLabel"
-      :plan="plan"
+      :is-lit="isLit"
+      :is-preview="previewMode !== null"
       :current-time="currentTime"
-      :has-sound="settings.ambientSound !== null"
-      :is-sound-playing="isSoundPlaying"
-      :show-hint="showFirstRunHint"
+      :child-lock="settings.childLock"
+      :announcement="`${copy.headline}. ${copy.detail}`"
       :needs-audio-unlock="needsAudioUnlock"
       :screen-may-sleep="screenMaySleep"
-      @toggle-nightlight="handleToggleNightLight"
-      @toggle-settings="handleToggleSettings"
+      @reveal="openParent"
+    />
+
+    <ParentControls
+      v-if="parentVisible"
+      :headline="copy.headline"
+      :detail="copy.detail"
+      :icon="isLit ? stateIcon(currentState) : 'power'"
+      :is-lit="isLit"
+      :can-nap="canNap"
+      :last-nap-minutes="settings.lastNapMinutes"
+      :plan="plan"
+      :has-sound="settings.ambientSound !== null"
+      :is-sound-playing="isSoundPlaying"
+      :screen-may-sleep="screenMaySleep"
+      :pinned="showFirstRunHint"
+      :child-lock="settings.childLock"
+      @toggle-light="handleToggleNightLight"
+      @start-nap="handleStartNap"
       @toggle-sound="handleToggleSound"
-      @toggle-help="toggleHelp"
+      @open-settings="handleToggleSettings"
+      @open-help="openHelp"
+      @close="closeParent"
     />
 
     <SettingsPanel
@@ -68,7 +82,7 @@ import { useKeepAwake } from '../composables/useKeepAwake'
 import { useChime } from '../composables/useChime'
 import { useAmbient } from '../composables/useAmbient'
 import { useWakeAlarm } from '../composables/useWakeAlarm'
-import { MODE_PRESENTATION } from '../utils/modes'
+import { MODE_PRESENTATION, describePhase, stateIcon } from '../utils/modes'
 import { formatClockTime } from '../utils/time'
 
 const {
@@ -92,6 +106,8 @@ const {
 const runtime = useNightLight(settings)
 const {
   currentTime,
+  phase,
+  activeOverride,
   isLit,
   isArmed,
   displayColor,
@@ -129,11 +145,48 @@ const plan = computed(() => {
     }))
 })
 
-// On-demand help replaces the old full-screen intro. The one-time first-run
-// "hint" reuses the onboarding flag: it shows a subtle nudge on the "?" until
-// the user's first meaningful interaction, then never returns.
+const copy = computed(() => describePhase({
+  state: currentState.value,
+  previewMode: previewMode.value,
+  overrideKind: activeOverride.value?.kind ?? null,
+  autoSchedule: settings.value.autoSchedule,
+  storyTimeLabel: formatClockTime(runtime.plan.value.windStart),
+  bedtimeLabel: formatClockTime(runtime.plan.value.bedtime),
+  okayLabel: okayTimeLabel.value,
+  humanTimeRemaining: humanTimeRemaining.value
+}))
+
+const isSleepPhase = (state: LightState): boolean => state === 'bedtime' || state === 'night'
+
+// A nap makes no sense once the evening routine is under way.
+const canNap = computed(() => !isSleepPhase(phase.value.base) && !isSleepPhase(currentState.value))
+
+// Kid screen vs parent layer. Until first-run onboarding completes, the parent
+// layer is pinned open (exempt from the lock and auto-hide); after that it
+// opens via the child-lock hold (or any tap with the lock off) and hides itself.
 const { showOnboarding: showFirstRunHint, completeOnboarding: dismissFirstRunHint } = useOnboarding()
 const showHelp = ref(false)
+const parentOpen = ref(false)
+const parentVisible = computed(() =>
+  (parentOpen.value || showFirstRunHint.value) && !isSettingsOpen.value && !showHelp.value
+)
+
+const openParent = () => {
+  parentOpen.value = true
+}
+const closeParent = () => {
+  dismissFirstRunHint()
+  parentOpen.value = false
+}
+
+// The moment first run completes, hand the open layer over to the auto-hide
+// timer instead of letting it vanish under the user's finger.
+// Sync, so closeParent (which also completes first run) can still close it.
+watch(showFirstRunHint, (pinned, wasPinned) => {
+  if (wasPinned && !pinned) {
+    parentOpen.value = true
+  }
+}, { flush: 'sync' })
 
 const openHelp = () => {
   dismissFirstRunHint()
@@ -142,15 +195,8 @@ const openHelp = () => {
 const closeHelp = () => {
   showHelp.value = false
 }
-const toggleHelp = () => {
-  if (showHelp.value) {
-    closeHelp()
-  } else {
-    openHelp()
-  }
-}
 
-// Any of these first interactions retires the first-run hint.
+// Any of these first interactions retires the first-run pin.
 const handleToggleSettings = () => {
   dismissFirstRunHint()
   toggleSettings()
@@ -193,8 +239,6 @@ const isSoundPlaying = ambient.isPlaying
 // tap anywhere unlocks both players and retries the pending sound.
 const needsAudioUnlock = ref(false)
 let pendingSound: AmbientSoundId | null = null
-
-const isSleepPhase = (state: LightState): boolean => state === 'bedtime' || state === 'night'
 
 const startAmbient = async (id: AmbientSoundId): Promise<void> => {
   if (!(await ambient.selectSound(id))) {
@@ -308,26 +352,66 @@ const closeSettings = () => {
   }
 }
 
-// Keyboard shortcuts
+// Settings and help auto-close after a minute untouched while the child lock is
+// on, so a panel left open can't become the kid's toy. Closing settings also
+// stops any preview. They return to the kid screen, not the parent layer.
+const PANEL_IDLE_MS = 60_000
+let panelIdleTimer: ReturnType<typeof setTimeout> | null = null
+
+const clearPanelIdle = () => {
+  if (panelIdleTimer) {
+    clearTimeout(panelIdleTimer)
+    panelIdleTimer = null
+  }
+}
+
+const armPanelIdle = () => {
+  clearPanelIdle()
+  if (settings.value.childLock && (isSettingsOpen.value || showHelp.value)) {
+    panelIdleTimer = setTimeout(() => {
+      closeHelp()
+      closeSettings()
+      parentOpen.value = false
+    }, PANEL_IDLE_MS)
+  }
+}
+
+watch(
+  () => [isSettingsOpen.value, showHelp.value, settings.value.childLock] as const,
+  armPanelIdle
+)
+
+// Keyboard shortcuts act only while the parent layer (or a panel) is open, so a
+// keyboard in reach of a child does nothing. Esc always works.
 const handleKeyDown = (event: KeyboardEvent) => {
+  armPanelIdle()
+  if (event.key === 'Escape') {
+    if (showHelp.value) {
+      closeHelp()
+    } else if (isSettingsOpen.value) {
+      closeSettings()
+    } else if (parentVisible.value) {
+      closeParent()
+    }
+    return
+  }
+
+  if (!parentVisible.value) {
+    return
+  }
+
   switch (event.key) {
     case ' ':
-      if (!isSettingsOpen.value && !showHelp.value) {
+      // Ignore repeats: a Space still held from the unlock must not toggle.
+      if (!event.repeat && !(event.target instanceof HTMLButtonElement) && !(event.target instanceof HTMLInputElement)) {
         event.preventDefault()
         handleToggleNightLight()
-      }
-      break
-    case 'Escape':
-      if (showHelp.value) {
-        closeHelp()
-      } else if (isSettingsOpen.value) {
-        closeSettings()
       }
       break
     case 's':
       if (event.metaKey || event.ctrlKey) {
         event.preventDefault()
-        toggleSettings()
+        handleToggleSettings()
       }
       break
   }
@@ -339,6 +423,7 @@ const handleContextMenu = (event: Event) => {
 }
 
 const handleUnlockGesture = () => {
+  armPanelIdle()
   void unlockAudio()
 }
 
@@ -364,6 +449,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  clearPanelIdle()
   document.removeEventListener('keydown', handleKeyDown)
   document.removeEventListener('contextmenu', handleContextMenu)
   document.removeEventListener('pointerdown', handleUnlockGesture, true)

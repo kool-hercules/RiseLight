@@ -46,3 +46,46 @@ export const stateHeadline = (state: LightState): string =>
 
 export const stateIcon = (state: LightState): ModeIconName =>
   state === 'inactive' ? 'power' : MODE_PRESENTATION[state].icon
+
+export type PhaseCopyInput = {
+  state: LightState
+  previewMode: LightMode | null
+  overrideKind: 'on' | 'nap' | 'off' | null
+  autoSchedule: boolean
+  storyTimeLabel: string // when tonight's routine starts (story time, or lights out)
+  bedtimeLabel: string
+  okayLabel: string
+  humanTimeRemaining: string
+}
+
+// The parent-facing headline and detail for the current phase. One function so
+// the visible copy and the screen-reader announcement never drift.
+export const describePhase = (input: PhaseCopyInput): { headline: string; detail: string } => {
+  if (input.previewMode) {
+    return { headline: MODE_PRESENTATION[input.previewMode].label, detail: 'Preview' }
+  }
+
+  const napping = input.overrideKind === 'nap'
+
+  switch (input.state) {
+    case 'bedtime':
+      return { headline: 'Story time', detail: `Lights out at ${input.bedtimeLabel}` }
+    case 'night':
+      return {
+        headline: napping ? 'Nap time' : 'Stay in bed',
+        detail: `Okay to get up at ${input.okayLabel}`
+      }
+    case 'wake':
+      return { headline: 'Almost time', detail: `Okay to get up ${input.humanTimeRemaining}` }
+    case 'awake':
+      return { headline: 'Okay to get up!', detail: napping ? 'Nap’s over!' : 'Good morning!' }
+    default:
+      if (input.overrideKind === 'off') {
+        return { headline: 'Off for now', detail: 'The routine picks up again on its own.' }
+      }
+      if (!input.autoSchedule) {
+        return { headline: 'Light is off', detail: 'Tap Start now at bedtime.' }
+      }
+      return { headline: 'Resting', detail: `Tonight starts at ${input.storyTimeLabel}` }
+  }
+}
