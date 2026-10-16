@@ -209,6 +209,18 @@ describe('overrides: nap', () => {
     expect(stateAt(at(16, 19, 5), settings, nap)).toBe('inactive')
     expect(stateAt(at(16, 19, 10), settings, nap)).toBe('bedtime')
   })
+
+  it('a nap ending inside a long wake window stays green into okay-to-get-up', () => {
+    // Window 06:30–07:30. The nap ends 07:05; its green must not fall back to
+    // the schedule's amber ramp at 07:20 and then turn green again at 07:30.
+    const settings = makeSettings({ wakeDuration: 60 })
+    const nap: Override = { kind: 'nap', start: at(17, 6, 35).getTime(), minutes: 30 }
+    for (const minute of [5, 20, 25, 29]) {
+      expect(stateAt(at(17, 7, minute), settings, nap)).toBe('awake')
+    }
+    expect(stateAt(at(17, 7, 30), settings, nap)).toBe('awake')
+    expect(stateAt(at(17, 8, 30), settings, nap)).toBe('inactive')
+  })
 })
 
 describe('overrides: off', () => {

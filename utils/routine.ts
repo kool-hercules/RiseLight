@@ -164,7 +164,8 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
     }
     case 'nap': {
       const end = override.start + override.minutes * MINUTE
-      const baseAtEnd = resolveBase(end, settings).segment?.state
+      const baseSegmentAtEnd = resolveBase(end, settings).segment
+      const baseAtEnd = baseSegmentAtEnd?.state
       // A nap that runs into the evening routine — or whose 15-minute green
       // tail would — never shows green: stay dark until it ends and hand
       // straight back to the schedule.
@@ -176,10 +177,15 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
         return [{ state: 'night', start: override.start, end }]
       }
       const rampStart = Math.max(override.start, end - Math.min(settings.wakeDuration, 5) * MINUTE)
+      // Ending inside the morning's wake window: stay green until the schedule
+      // turns green too, so the light never goes back from green to amber.
+      const greenEnd = baseAtEnd === 'wake' && baseSegmentAtEnd
+        ? Math.max(end + NAP_AWAKE_MS, baseSegmentAtEnd.end)
+        : end + NAP_AWAKE_MS
       return [
         { state: 'night', start: override.start, end: rampStart },
         { state: 'wake', start: rampStart, end },
-        { state: 'awake', start: end, end: end + NAP_AWAKE_MS }
+        { state: 'awake', start: end, end: greenEnd }
       ]
     }
     case 'off': {
