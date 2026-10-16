@@ -7,7 +7,7 @@
       :is-preview="previewMode !== null"
       :current-time="currentTime"
       :child-lock="settings.childLock"
-      :announcement="`${copy.headline}. ${copy.detail}`"
+      :announcement="announcement"
       :needs-audio-unlock="needsAudioUnlock"
       :screen-may-sleep="screenMaySleep"
       @reveal="openParent"
@@ -167,6 +167,11 @@ const copy = computed(() => describePhase({
   okayLabel: okayTimeLabel.value,
   humanTimeRemaining: humanTimeRemaining.value
 }))
+
+const announcement = computed(() => {
+  const { headline, detail } = copy.value
+  return `${/[.!?]$/.test(headline) ? headline : `${headline}.`} ${detail}`
+})
 
 const isSleepPhase = (state: LightState): boolean => state === 'bedtime' || state === 'night'
 
