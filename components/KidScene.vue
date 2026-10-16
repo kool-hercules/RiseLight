@@ -17,6 +17,7 @@ const props = defineProps<{
   color: string
   brightness: number // 0..1
   previewMode: LightMode | null
+  muted?: boolean // parent controls are open: step back so their text stays legible
 }>()
 
 const scene = computed<LightState>(() => props.previewMode ?? props.state)
@@ -24,7 +25,9 @@ const scene = computed<LightState>(() => props.previewMode ?? props.state)
 const p = computed(() => (props.previewMode ? 0.5 : Math.min(1, Math.max(0, props.progress))))
 
 // Dim with the light; never fully invisible while lit, never glaring.
-const sceneOpacity = computed(() => Math.min(0.85, Math.max(0.18, props.brightness * 1.6)))
+const sceneOpacity = computed(() =>
+  props.muted ? 0.06 : Math.min(0.85, Math.max(0.18, props.brightness * 1.6))
+)
 
 const STARS = [
   [48, 40, 2.2], [92, 72, 1.6], [140, 30, 2], [188, 62, 1.4], [236, 26, 2.4],
@@ -150,7 +153,7 @@ const sunY = computed(() => HORIZON + 30 - 120 * p.value)
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  transition: opacity 1s ease, color 1s ease;
+  transition: opacity 0.4s ease, color 1s ease;
 }
 
 .kid-scene__svg {

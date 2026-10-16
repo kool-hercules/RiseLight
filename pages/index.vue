@@ -20,6 +20,7 @@
           :color="displayColor"
           :brightness="displayBrightness"
           :preview-mode="previewMode"
+          :muted="parentVisible"
         />
       </template>
     </NightLight>
