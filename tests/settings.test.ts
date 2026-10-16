@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { useSettings } from '../composables/useSettings'
 import {
+  scheduleTimeError,
   SETTINGS_SCHEMA_VERSION,
   SETTINGS_STORAGE_KEY,
   buildSplitSchedule,
@@ -371,5 +372,14 @@ describe('settings reset', () => {
     expect(store.settings.value.colors).not.toBe(firstColors)
     expect(store.settings.value.schedule).not.toBe(firstSchedule)
     expect(store.settings.value).toEqual(createDefaultSettings())
+  })
+})
+
+describe('scheduleTimeError', () => {
+  it('explains out-of-range times instead of dropping them silently', () => {
+    expect(scheduleTimeError('wakeTime', '02:00')).toMatch(/4:00 AM/)
+    expect(scheduleTimeError('bedtime', '00:30')).toMatch(/3:00 PM/)
+    expect(scheduleTimeError('wakeTime', '06:30')).toBeNull()
+    expect(scheduleTimeError('bedtime', '19:30')).toBeNull()
   })
 })

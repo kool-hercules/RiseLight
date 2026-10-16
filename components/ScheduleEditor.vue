@@ -5,6 +5,7 @@ import {
   buildSameSchedule,
   buildSplitSchedule,
   detectSchedulePreset,
+  scheduleTimeError,
   splitScheduleParts,
   type SchedulePreset
 } from '../utils/settings'
@@ -66,17 +67,35 @@ const choosePreset = (next: SchedulePreset) => {
 
 const parts = computed(() => splitScheduleParts(props.settings.schedule))
 
-const timeValue = (event: Event): string => (event.target as HTMLInputElement).value
+const timeError = ref<string | null>(null)
+
+// The typed time, or null when it's empty or out of range. A rejected value is
+// put back to the saved one and the reason shown, so the input never displays
+// a time the routine isn't using.
+const acceptTime = (field: keyof DaySchedule, event: Event, saved: string): string | null => {
+  const input = event.target as HTMLInputElement
+  const value = input.value
+  if (!value) {
+    return null
+  }
+  const error = scheduleTimeError(field, value)
+  timeError.value = error
+  if (error) {
+    input.value = saved
+    return null
+  }
+  return value
+}
 
 const setSame = (field: keyof DaySchedule, event: Event) => {
-  const value = timeValue(event)
+  const value = acceptTime(field, event, parts.value.weekday[field])
   if (value) {
     emit('update-schedule', buildSameSchedule({ ...parts.value.weekday, [field]: value }))
   }
 }
 
 const setSplit = (group: 'weekday' | 'weekend', field: keyof DaySchedule, event: Event) => {
-  const value = timeValue(event)
+  const value = acceptTime(field, event, parts.value[group][field])
   if (value) {
     const next = { ...parts.value, [group]: { ...parts.value[group], [field]: value } }
     emit('update-schedule', buildSplitSchedule(next.weekday, next.weekend))
@@ -84,7 +103,7 @@ const setSplit = (group: 'weekday' | 'weekend', field: keyof DaySchedule, event:
 }
 
 const setDay = (day: number, field: keyof DaySchedule, event: Event) => {
-  const value = timeValue(event)
+  const value = acceptTime(field, event, props.settings.schedule[day][field])
   if (value) {
     emit('update-day', day, { [field]: value })
   }
@@ -174,7 +193,8 @@ const onWakeDuration = (event: Event) => {
         </template>
       </div>
     </div>
-    <p class="text-xs text-gray-500 mb-5">Wake-up between 4 AM and noon; bedtime between 3 PM and midnight.</p>
+    <p v-if="timeError" class="text-xs text-amber-300 mb-5" role="alert">{{ timeError }}</p>
+    <p v-else class="text-xs text-gray-500 mb-5">Wake-up between 4 AM and noon; bedtime between 3 PM and midnight.</p>
 
     <label class="block text-sm font-medium mb-2">Story time before bed</label>
     <div class="timer-row mb-1">

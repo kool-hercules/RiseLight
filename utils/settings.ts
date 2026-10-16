@@ -366,3 +366,13 @@ export const detectSchedulePreset = (schedule: readonly DaySchedule[]): Schedule
 
 export const isValidDaySchedule = (day: unknown): day is DaySchedule =>
   isRecord(day) && isValidMorningWake(day.wakeTime) && isValidBedtime(day.bedtime)
+
+// Why a typed schedule time can't be used, or null when it can. Browsers (iOS
+// Safari especially) ignore min/max on time inputs, so the editor checks here
+// and says so instead of silently keeping the old value.
+export const scheduleTimeError = (field: keyof DaySchedule, time: string): string | null => {
+  if (field === 'wakeTime') {
+    return isValidMorningWake(time) ? null : 'Wake-up needs to be between 4:00 AM and noon.'
+  }
+  return isValidBedtime(time) ? null : 'Bedtime needs to be between 3:00 PM and midnight.'
+}
