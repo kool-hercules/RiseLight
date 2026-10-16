@@ -163,6 +163,25 @@ describe('overrides', () => {
     runtime.dispose()
   })
 
+  it('Start now after Off for now undoes the Off: story time comes back, not night', () => {
+    const { runtime } = createRuntime(localDate(16, 19, 15))
+    runtime.turnOffForNow()
+    expect(runtime.currentState.value).toBe('inactive')
+    runtime.startNow()
+    expect(runtime.currentState.value).toBe('bedtime')
+    expect(runtime.override.value).toBeNull()
+    runtime.dispose()
+  })
+
+  it('Start now after Off for now in the morning resumes the sunrise where it is', () => {
+    const { runtime } = createRuntime(localDate(17, 6, 45))
+    runtime.turnOffForNow()
+    runtime.startNow()
+    expect(runtime.currentState.value).toBe('wake')
+    expect(runtime.progress.value).toBeCloseTo(0.5)
+    runtime.dispose()
+  })
+
   it('Off for now during an early start that overlaps story time is one tap to dark', () => {
     const { runtime, goTo } = createRuntime(localDate(16, 18, 50))
     runtime.startNow()

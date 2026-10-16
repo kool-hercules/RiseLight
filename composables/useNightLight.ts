@@ -98,8 +98,14 @@ export const createNightLightRuntime = (
 
   // "Start now": light the night from this moment until the next wake, then
   // the usual ramp and hold. Used with auto-schedule off, or for an early night.
+  // Over a lit schedule (only reachable after Off for now) it is an undo: the
+  // schedule resumes, so story time comes back as story time, not as night.
   const startNow = (): void => {
     refresh()
+    if (isLitState(resolvePhase(currentTime.value, settings.value, null).state)) {
+      setOverride(null)
+      return
+    }
     setOverride({ kind: 'on', start: currentTime.value.getTime() })
   }
 
