@@ -96,6 +96,7 @@ import { useAmbient } from '../composables/useAmbient'
 import { useWakeAlarm } from '../composables/useWakeAlarm'
 import { MODE_PRESENTATION, describePhase, stateIcon } from '../utils/modes'
 import { formatClockTime } from '../utils/time'
+import { AUDIO_UNLOCK_EVENTS, createAudioUnlocker } from '../utils/audioUnlock'
 
 const {
   settings,
@@ -279,17 +280,20 @@ const primeAudio = async (): Promise<boolean> => {
   return chimeOk && ambientOk
 }
 
+const unlocker = createAudioUnlocker(primeAudio)
+
 const unlockAudio = async (): Promise<void> => {
   if (!needsAudioUnlock.value) {
     return
   }
-  const unlocked = await primeAudio()
-  const retry = pendingSound
-  pendingSound = null
-  if (retry && isSleepPhase(currentState.value)) {
-    await startAmbient(retry)
-  }
-  needsAudioUnlock.value = !unlocked || pendingSound !== null
+  await unlocker(async unlocked => {
+    const retry = pendingSound
+    pendingSound = null
+    if (retry && isSleepPhase(currentState.value)) {
+      await startAmbient(retry)
+    }
+    needsAudioUnlock.value = !unlocked || pendingSound !== null
+  })
 }
 
 // Story time (or lights-out with no wind-down, a manual start, or a nap)
@@ -448,8 +452,9 @@ const handleUnlockGesture = () => {
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown)
   document.addEventListener('contextmenu', handleContextMenu)
-  document.addEventListener('pointerdown', handleUnlockGesture, true)
-  document.addEventListener('keydown', handleUnlockGesture, true)
+  for (const type of AUDIO_UNLOCK_EVENTS) {
+    document.addEventListener(type, handleUnlockGesture, true)
+  }
 
   // A reload mid-routine: try to resume the bedtime sound and pre-unlock the
   // chime. Without a gesture these usually come back blocked, which raises the
@@ -470,8 +475,9 @@ onBeforeUnmount(() => {
   clearPanelIdle()
   document.removeEventListener('keydown', handleKeyDown)
   document.removeEventListener('contextmenu', handleContextMenu)
-  document.removeEventListener('pointerdown', handleUnlockGesture, true)
-  document.removeEventListener('keydown', handleUnlockGesture, true)
+  for (const type of AUDIO_UNLOCK_EVENTS) {
+    document.removeEventListener(type, handleUnlockGesture, true)
+  }
 })
 </script>
 
