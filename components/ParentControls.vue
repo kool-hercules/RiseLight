@@ -4,11 +4,12 @@ import type { LightMode } from '../types'
 import { NAP_OPTIONS } from '../types'
 import type { ModeIconName } from '../utils/modes'
 import ModeIcon from './ModeIcon.vue'
+import { parentIdleMs } from '../utils/parentLayer'
 
 // Everything a parent needs, kept off the kid screen: start/stop, nap, sound,
 // settings, help, and tonight's plan. Opened by the child-lock hold (or any tap
-// with the lock off); hides itself after 15 seconds of no interaction unless
-// pinned for first run.
+// with the lock off); hides itself after 15 seconds of no interaction (two
+// minutes while pinned for first run).
 
 interface PlanPhase {
   key: LightMode
@@ -42,17 +43,13 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const IDLE_MS = 15_000
 let idleTimer: ReturnType<typeof setTimeout> | null = null
 
 const resetIdle = (): void => {
   if (idleTimer) {
     clearTimeout(idleTimer)
-    idleTimer = null
   }
-  if (!props.pinned) {
-    idleTimer = setTimeout(() => emit('close'), IDLE_MS)
-  }
+  idleTimer = setTimeout(() => emit('close'), parentIdleMs(props.pinned))
 }
 
 watch(() => props.pinned, resetIdle)
