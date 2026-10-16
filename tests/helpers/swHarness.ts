@@ -20,6 +20,10 @@ export const loadServiceWorker = (network: (url: string) => Promise<FakeResponse
     put: async (request: string | { url: string }, value: FakeResponse) => { store.set(key(request), value) },
     match: async (request: string | { url: string }) => store.get(key(request)),
     addAll: async (urls: string[]) => {
+      // Like the real Cache API: duplicate requests reject the whole batch.
+      if (new Set(urls.map(key)).size !== urls.length) {
+        throw new Error('InvalidStateError: duplicate requests')
+      }
       for (const url of urls) {
         store.set(key(url), await network(key(url)))
       }

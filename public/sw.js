@@ -54,18 +54,22 @@ self.addEventListener('message', event => {
   if (!data || data.type !== 'cache-urls' || !Array.isArray(data.urls)) {
     return
   }
-  const urls = data.urls.filter(href => {
+  const urls = new Set()
+  for (const href of data.urls) {
     try {
       const url = new URL(href, self.location.origin)
-      return url.origin === self.location.origin && FINGERPRINTED.test(url.pathname) && !url.search
+      if (url.origin === self.location.origin && FINGERPRINTED.test(url.pathname) && !url.search) {
+        urls.add(url.href)
+      }
     } catch {
-      return false
+      // Not a URL; skip it.
     }
-  })
+  }
   event.waitUntil(
     caches
       .open(CACHE_VERSION)
-      .then(cache => cache.addAll(urls))
+      // addAll rejects the whole batch on a duplicate, hence the Set.
+      .then(cache => cache.addAll([...urls]))
       .catch(() => {
         // Best effort; runtime caching still fills in on the next load.
       })

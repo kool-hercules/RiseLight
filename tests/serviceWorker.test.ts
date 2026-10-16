@@ -26,7 +26,8 @@ describe('service worker', () => {
 
   it('caches the build files the page already loaded, so the first visit is enough to launch offline', async () => {
     const sw = loadServiceWorker(async url => response(`file ${url}`))
-    await sw.message({ type: 'cache-urls', urls: ['/_nuxt/entry.abc123.js', '/_nuxt/entry.abc123.css', 'https://elsewhere.test/x.js'] })
+    // Performance entries list a file once per fetch, so duplicates are normal.
+    await sw.message({ type: 'cache-urls', urls: ['/_nuxt/entry.abc123.js', '/_nuxt/entry.abc123.css', '/_nuxt/entry.abc123.js', 'https://elsewhere.test/x.js'] })
     expect(sw.store.has(sw.key('/_nuxt/entry.abc123.js'))).toBe(true)
     expect(sw.store.has(sw.key('/_nuxt/entry.abc123.css'))).toBe(true)
     expect(sw.store.has('https://elsewhere.test/x.js')).toBe(false)
