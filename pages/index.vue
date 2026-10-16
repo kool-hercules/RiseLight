@@ -39,6 +39,10 @@
       :screen-may-sleep="screenMaySleep"
       :pinned="showFirstRunHint"
       :child-lock="settings.childLock"
+      :brightness="isLit ? settings.brightness[currentState as LightMode] : null"
+      :volume="settings.ambientVolume"
+      @update-brightness="value => isLit && updateBrightness(currentState as LightMode, value)"
+      @update-volume="ambient.setVolume"
       @toggle-light="handleToggleNightLight"
       @start-nap="handleStartNap"
       @toggle-sound="handleToggleSound"
@@ -85,7 +89,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
-import type { AmbientSoundId, LightState } from '../types'
+import type { AmbientSoundId, LightMode, LightState } from '../types'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'

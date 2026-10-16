@@ -32,6 +32,8 @@ const props = defineProps<{
   screenMaySleep: boolean
   pinned: boolean
   childLock: boolean
+  brightness: number | null // the current phase's brightness, null while dark
+  volume: number
 }>()
 
 const emit = defineEmits<{
@@ -40,8 +42,12 @@ const emit = defineEmits<{
   'toggle-sound': []
   'open-settings': []
   'open-help': []
+  'update-brightness': [value: number]
+  'update-volume': [value: number]
   close: []
 }>()
+
+const sliderValue = (event: Event): number => Number((event.target as HTMLInputElement).value)
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -136,6 +142,39 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <!-- The two things a parent reaches for at 2 AM, without opening settings. -->
+      <div v-if="brightness !== null || isSoundPlaying" class="quick-adjust mt-6 mx-auto max-w-[16rem] space-y-3">
+        <label v-if="brightness !== null" class="quick-row">
+          <ModeIcon name="sun" class="w-4 h-4 shrink-0 text-white/60" />
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            class="slider flex-1"
+            :value="brightness"
+            aria-label="Brightness for this part of the routine"
+            @input="emit('update-brightness', sliderValue($event))"
+          >
+        </label>
+        <label v-if="isSoundPlaying" class="quick-row">
+          <svg class="w-4 h-4 shrink-0 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" />
+            <path d="M15.5 8.5a5 5 0 010 7" />
+          </svg>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            class="slider flex-1"
+            :value="volume"
+            aria-label="Sound volume"
+            @input="emit('update-volume', sliderValue($event))"
+          >
+        </label>
+      </div>
+
       <div v-if="plan.length" class="plan mt-8 mx-auto max-w-[16rem] text-left">
         <p class="text-xs uppercase tracking-wide text-white/50 mb-3 text-center">Tonight’s plan</p>
         <ul class="space-y-2.5">
@@ -223,6 +262,12 @@ onBeforeUnmount(() => {
 
 .legible {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.quick-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .screen-warning {
