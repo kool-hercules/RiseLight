@@ -6,6 +6,7 @@ import {
   isOverrideActive,
   overrideEnd,
   resolvePhase,
+  upcomingNight,
   upcomingOkayToWake,
   type Override,
   type ResolvedPhase
@@ -23,35 +24,88 @@ const WINDOW_STARTS = [new Date(2026, 2, 3).getTime(), new Date(2026, 9, 27).get
 const pad = (value: number): string => String(value).padStart(2, '0')
 const hhmm = (minutes: number): string => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`
 
-const okayTimeArb = fc.integer({ min: 4 * 60, max: 13 * 60 }).map(hhmm)
-const bedtimeArb = fc.integer({ min: 15 * 60, max: 23 * 60 + 59 }).map(hhmm)
+const minutesBetween = (earliest: number, latest: number): fc.Arbitrary<string> =>
+  fc.integer({ min: earliest, max: latest }).map(hhmm)
+
+const weekOf = <T>(day: fc.Arbitrary<T>): fc.Arbitrary<T[]> => fc.array(day, { minLength: 7, maxLength: 7 })
+
+const okayTimeArb = minutesBetween(4 * 60, 13 * 60)
+const bedtimeArb = minutesBetween(15 * 60, 23 * 60 + 59)
+const dayArb = fc.record({ okayTime: okayTimeArb, bedtime: bedtimeArb })
+// A late green, a long hold and an early bedtime: the corner where the
+// morning's green meets the next story time. Every override bug found so far
+// lives there, and uniform draws rarely reach it.
+const tightDayArb = fc.record({ okayTime: minutesBetween(11 * 60 + 30, 13 * 60), bedtime: minutesBetween(15 * 60, 18 * 60) })
 
 const settingsArb = (autoSchedule: fc.Arbitrary<boolean> = fc.boolean()): fc.Arbitrary<Settings> =>
-  fc.record({
-    schedule: fc.array(fc.record({ okayTime: okayTimeArb, bedtime: bedtimeArb }), { minLength: 7, maxLength: 7 }),
-    wakeDuration: fc.integer({ min: 1, max: 60 }),
-    windDownMinutes: fc.integer({ min: 0, max: 60 }),
-    awakeHoldMinutes: fc.integer({ min: 1, max: 240 }),
-    autoSchedule
-  }).map(patch => ({ ...createDefaultSettings(), ...patch }))
+  fc.oneof(
+    fc.record({
+      schedule: weekOf(dayArb),
+      wakeDuration: fc.integer({ min: 1, max: 60 }),
+      windDownMinutes: fc.integer({ min: 0, max: 60 }),
+      awakeHoldMinutes: fc.integer({ min: 1, max: 240 }),
+      autoSchedule
+    }),
+    fc.record({
+      schedule: weekOf(tightDayArb),
+      wakeDuration: fc.integer({ min: 1, max: 60 }),
+      windDownMinutes: fc.integer({ min: 0, max: 60 }),
+      awakeHoldMinutes: fc.integer({ min: 120, max: 240 }),
+      autoSchedule
+    })
+  ).map(patch => ({ ...createDefaultSettings(), ...patch }))
 
 // An instant inside one of the DST windows.
 const instantArb = fc.tuple(fc.constantFrom(...WINDOW_STARTS), fc.integer({ min: 0, max: 10 * DAY_MINUTES - 1 }))
   .map(([start, minutes]) => start + minutes * MIN)
 
-type OverrideSpec = { kind: Override['kind']; startOffset: number; minutes: number }
+// Where an override starts: anywhere relative to the anchor instant, or a few
+// minutes either side of one of the schedule's landmarks around it (for a nap,
+// so that it *ends* there). Boundaries are where overrides go wrong.
+const LANDMARKS = ['windStart', 'bedtime', 'wakeAt', 'okayAt', 'idleAt', 'nextWindStart'] as const
+
+type OverrideSpec = {
+  kind: Override['kind']
+  startOffset: number
+  minutes: number
+  landmark: (typeof LANDMARKS)[number] | null
+  delta: number
+}
 
 const overrideSpecArb: fc.Arbitrary<OverrideSpec> = fc.record({
   kind: fc.constantFrom<Override['kind']>('on', 'nap', 'off'),
-  // Relative to the walk start, so it may already be running, start mid-walk,
+  // Relative to the anchor, so it may already be running, start mid-walk,
   // or be long expired.
   startOffset: fc.integer({ min: -2 * DAY_MINUTES, max: DAY_MINUTES }),
-  minutes: fc.integer({ min: 10, max: 180 })
+  minutes: fc.integer({ min: 10, max: 180 }),
+  landmark: fc.option(fc.constantFrom(...LANDMARKS), { nil: null }),
+  delta: fc.integer({ min: -20, max: 20 })
 })
+
+const landmarkAt = (landmark: (typeof LANDMARKS)[number], anchor: number, settings: Settings): number => {
+  const night = upcomingNight(new Date(anchor), settings)
+  const idleAt = night.okayAt.getTime() + settings.awakeHoldMinutes * MIN
+  switch (landmark) {
+    case 'idleAt':
+      return idleAt
+    case 'nextWindStart':
+      return upcomingNight(new Date(idleAt), settings).windStart.getTime()
+    default:
+      return night[landmark].getTime()
+  }
+}
+
+const overrideStart = (spec: OverrideSpec, anchor: number, settings: Settings): number => {
+  if (spec.landmark === null) {
+    return anchor + spec.startOffset * MIN
+  }
+  const target = landmarkAt(spec.landmark, anchor, settings) + spec.delta * MIN
+  return spec.kind === 'nap' ? target - spec.minutes * MIN : target
+}
 
 // `off` remembers the phase it was pressed in, taken from a real resolvePhase.
 const buildOverride = (spec: OverrideSpec, anchor: number, settings: Settings): Override => {
-  const start = anchor + spec.startOffset * MIN
+  const start = overrideStart(spec, anchor, settings)
   switch (spec.kind) {
     case 'on':
       return { kind: 'on', start }
@@ -128,23 +182,27 @@ describe('routine properties', () => {
   })
 
   it('3. without an `off` override, scheduled story time is never skipped (on/nap may show night instead)', () => {
+    // Only story-time minutes can fail, so walk just those of the next two
+    // nights. That is cheap enough to run many more cases than a full walk.
     const notOff = overrideSpecArb.filter(spec => spec.kind !== 'off')
     fc.assert(
       fc.property(settingsArb(fc.constant(true)), instantArb, fc.option(notOff, { nil: null }), (settings, from, spec) => {
         const override = spec ? buildOverride(spec, from, settings) : null
-        for (const phase of walk(from, DAY_MINUTES, settings, override)) {
-          if (phase.base !== 'bedtime') {
-            continue
-          }
-          if (phase.override) {
-            // `on` and nap may replace story time with night. Nothing else.
-            expect(phase.state).toBe('night')
-          } else {
-            expect(phase.state).toBe('bedtime')
+        const first = upcomingNight(new Date(from), settings)
+        for (const night of [first, upcomingNight(first.okayAt, settings)]) {
+          const minutes = (night.bedtime.getTime() - night.windStart.getTime()) / MIN
+          for (const phase of walk(night.windStart.getTime(), minutes - 1, settings, override)) {
+            expect(phase.base).toBe('bedtime')
+            if (phase.override) {
+              // `on` and nap may replace story time with night. Nothing else.
+              expect(phase.state).toBe('night')
+            } else {
+              expect(phase.state).toBe('bedtime')
+            }
           }
         }
       }),
-      { numRuns: 60 }
+      { numRuns: 1000 }
     )
   })
 
@@ -172,10 +230,10 @@ describe('routine properties', () => {
   it('5. every upcoming okay-to-get-up instant is green, and the minute before it is not', () => {
     // The app only creates overrides at "now", so one may have started already
     // but never lies in the future.
-    const started = overrideSpecArb.map(spec => ({ ...spec, startOffset: Math.min(0, spec.startOffset) }))
     fc.assert(
-      fc.property(settingsArb(), instantArb, fc.option(started, { nil: null }), (settings, now, spec) => {
-        const override = spec ? buildOverride(spec, now, settings) : null
+      fc.property(settingsArb(), instantArb, fc.option(overrideSpecArb, { nil: null }), (settings, anchor, spec) => {
+        const override = spec ? buildOverride(spec, anchor, settings) : null
+        const now = Math.max(anchor, override?.start ?? anchor)
         for (const instant of upcomingOkayToWake(new Date(now), settings, override, 7)) {
           const at = instant.getTime()
           expect(resolvePhase(instant, settings, override).state).toBe('awake')
@@ -191,7 +249,7 @@ describe('routine properties', () => {
 // that schema and compared minute by minute against the frozen v2 engine.
 const v2SettingsArb: fc.Arbitrary<V2Settings> = fc.record({
   schedule: fc.array(
-    fc.record({ wakeTime: fc.integer({ min: 4 * 60, max: 12 * 60 }).map(hhmm), bedtime: bedtimeArb }),
+    fc.record({ wakeTime: minutesBetween(4 * 60, 12 * 60), bedtime: bedtimeArb }),
     { minLength: 7, maxLength: 7 }
   ),
   wakeDuration: fc.integer({ min: 1, max: 60 }),
