@@ -306,8 +306,9 @@ export const phaseDisplay = (phase: ResolvedPhase, settings: Settings, now: Date
 
 // The next `count` "okay to get up" instants after `now`, honoring the
 // override: each candidate (scheduled or override-driven) is kept only if the
-// resolved phase at that instant really is "okay to get up". Feeds the native
-// alarms.
+// light really *turns* green then: "okay to get up" at that instant and not
+// just before it (a nap ending inside the wake window is already green when the
+// schedule's okay time arrives). Feeds the native alarms.
 export const upcomingOkayToWake = (
   now: Date,
   settings: Settings,
@@ -334,10 +335,12 @@ export const upcomingOkayToWake = (
   // that, resolvePhase at a future instant must ignore it.
   const effectiveOverride = isOverrideActive(override, at, settings) ? override : null
 
+  const isGreen = (instant: number) => resolvePhase(new Date(instant), settings, effectiveOverride).state === 'awake'
+
   return [...candidates]
     .filter(instant => instant > at)
     .sort((a, b) => a - b)
-    .filter(instant => resolvePhase(new Date(instant), settings, effectiveOverride).state === 'awake')
+    .filter(instant => isGreen(instant) && !isGreen(instant - 1))
     .slice(0, count)
     .map(instant => new Date(instant))
 }

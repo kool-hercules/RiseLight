@@ -396,6 +396,16 @@ describe('upcomingOkayToWake', () => {
     expect(withNap[1].getTime()).toBe(at(18, 7).getTime())
   })
 
+  it('lists one okay-to-get-up per green, not the schedule’s when a nap is already green', () => {
+    // Found by property 5. Window 06:30–07:30; the nap ends 07:05 and stays
+    // green through 07:30, so 07:30 is not a new "okay" and must not get a
+    // second alarm.
+    const settings = makeSettings({ schedule: createDefaultSchedule('07:30'), wakeDuration: 60 })
+    const nap: Override = { kind: 'nap', start: at(17, 6, 35).getTime(), minutes: 30 }
+    const times = upcomingOkayToWake(at(17, 6, 36), settings, nap, 2).map(date => date.getTime())
+    expect(times).toEqual([at(17, 7, 5).getTime(), at(18, 7, 30).getTime()])
+  })
+
   it('returns only override wakes when autoSchedule is off', () => {
     const settings = makeSettings({ autoSchedule: false })
     expect(upcomingOkayToWake(at(16, 21), settings, null, 7)).toEqual([])
