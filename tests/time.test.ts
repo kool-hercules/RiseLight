@@ -26,8 +26,8 @@ describe('humanizeCountdown', () => {
 })
 
 describe('formatClockTime', () => {
-  it('formats a 12-hour clock label', () => {
+  it('formats a 12-hour clock label without a leading zero, like the kid-screen clock', () => {
     const label = formatClockTime(new Date(2026, 0, 15, 7, 5))
-    expect(label).toMatch(/^0?7:05\s?[AP]M$/i)
+    expect(label).toMatch(/^7:05\s?[AP]M$/i)
   })
 })

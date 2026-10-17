@@ -106,6 +106,71 @@
     right: max(1rem, env(safe-area-inset-right, 1rem));
   }
   
+  /* Shared settings controls: chip rows and iOS-style switches. */
+  .timer-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .timer-chip {
+    @apply bg-gray-800/60 hover:bg-gray-700 text-gray-200 text-sm rounded-lg transition-colors;
+    min-width: 44px;
+    min-height: 40px;
+    padding: 0 0.6rem;
+    touch-action: manipulation;
+  }
+
+  .timer-chip--active {
+    @apply bg-blue-600 text-white;
+  }
+
+  /* iOS-style toggle switch with a comfortable touch target */
+  .chime-toggle {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    width: 52px;
+    height: 32px;
+    border-radius: 9999px;
+    background: #4b5563;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    touch-action: manipulation;
+  }
+
+  .chime-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 26px;
+    height: 26px;
+    border-radius: 9999px;
+    background: #fff;
+    transition: transform 0.2s ease;
+  }
+
+  .chime-toggle:checked {
+    background: #34c759;
+  }
+
+  .chime-toggle:checked::after {
+    transform: translateX(20px);
+  }
+
+  .chime-toggle:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chime-toggle,
+    .chime-toggle::after {
+      transition: none;
+    }
+  }
+
   /* iPhone-specific optimizations */
   @media (max-width: 480px) {
     .settings-button {

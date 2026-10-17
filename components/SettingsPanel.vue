@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import type { AmbientSoundId, LightMode, Settings } from '../types'
+import type { AmbientSoundId, DaySchedule, LightMode, Settings } from '../types'
 import { SLEEP_TIMER_OPTIONS } from '../types'
 import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
 import { AMBIENT_SOUNDS } from '../utils/ambient'
 import ModeIcon from './ModeIcon.vue'
 import SoundIcon from './SoundIcon.vue'
+import ScheduleEditor from './ScheduleEditor.vue'
 
 interface Props {
   isOpen: boolean
@@ -20,8 +21,12 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'close': []
-  'update-wake-time': [time: string]
+  'update-schedule': [schedule: DaySchedule[]]
+  'update-day': [day: number, patch: Partial<DaySchedule>]
   'update-wake-duration': [duration: number]
+  'update-wind-down': [minutes: number]
+  'update-awake-hold': [minutes: number]
+  'update-toggle': [key: 'autoSchedule' | 'ambientAutoStart' | 'childLock' | 'sceneEnabled', enabled: boolean]
   'update-brightness': [state: keyof Settings['brightness'], value: number]
   'update-color': [state: keyof Settings['colors'], color: string]
   'update-chime': [enabled: boolean]
@@ -73,21 +78,6 @@ const previewColor = computed(() =>
   props.previewMode ? props.settings.colors[props.previewMode] : '#000000'
 )
 
-const updateWakeTime = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  if (target.value) {
-    emit('update-wake-time', target.value)
-  }
-}
-
-const updateWakeDuration = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const duration = parseInt(target.value)
-  if (!isNaN(duration)) {
-    emit('update-wake-duration', duration)
-  }
-}
-
 const updateBrightness = (state: keyof Settings['brightness'], event: Event) => {
   const target = event.target as HTMLInputElement
   const value = parseInt(target.value)
@@ -118,6 +108,8 @@ const updatePreviewColor = (event: Event) => {
 const onChimeToggle = (event: Event) => {
   emit('update-chime', (event.target as HTMLInputElement).checked)
 }
+
+const checked = (event: Event): boolean => (event.target as HTMLInputElement).checked
 
 // Tapping the sound that's currently playing stops it; any other tile selects
 // and starts that sound. The "Off" tile always stops.
@@ -223,39 +215,38 @@ const confirmReset = () => {
           survive a reload.
         </div>
 
-        <!-- Wake Time Setting -->
+        <!-- Routine -->
         <div class="mb-6">
-          <label class="block text-sm font-medium mb-2">Wake-up time</label>
-          <input
-            type="time"
-            :value="settings.wakeTime"
-            @input="updateWakeTime"
-            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-          <p class="text-xs text-gray-500 mt-1">When the morning wake-up window begins.</p>
+          <h3 class="text-sm font-medium mb-3">Routine</h3>
+          <ScheduleEditor
+            :settings="settings"
+            @update-schedule="schedule => emit('update-schedule', schedule)"
+            @update-day="(day, patch) => emit('update-day', day, patch)"
+            @update-wake-duration="minutes => emit('update-wake-duration', minutes)"
+            @update-wind-down="minutes => emit('update-wind-down', minutes)"
+            @update-awake-hold="minutes => emit('update-awake-hold', minutes)"
+            @update-auto-schedule="enabled => emit('update-toggle', 'autoSchedule', enabled)"
+          />
         </div>
 
-        <!-- Wake Duration Setting -->
+        <!-- Child lock -->
         <div class="mb-6">
-          <label class="block text-sm font-medium mb-2">
-            Wake-up window: {{ settings.wakeDuration }} minutes
+          <label class="flex items-center justify-between gap-4 cursor-pointer">
+            <span>
+              <span class="block text-sm font-medium">Child lock</span>
+              <span class="block text-xs text-gray-500 mt-1">
+                Hold the clock for 3 seconds to open controls. Off: any tap opens them.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              :checked="settings.childLock"
+              @change="emit('update-toggle', 'childLock', checked($event))"
+              class="chime-toggle shrink-0"
+              aria-label="Child lock"
+            >
           </label>
-          <input
-            type="range"
-            min="1"
-            max="60"
-            step="1"
-            :value="settings.wakeDuration"
-            @input="updateWakeDuration"
-            class="slider w-full"
-          >
-          <div class="flex justify-between text-xs text-gray-400 mt-1">
-            <span>1 min</span>
-            <span>60 min</span>
-          </div>
-          <p class="text-xs text-gray-500 mt-1">
-            How long the “almost time” color shows before it becomes “okay to get up”.
-          </p>
         </div>
 
         <!-- Okay-to-get-up chime -->
@@ -348,12 +339,46 @@ const confirmReset = () => {
           <p class="text-xs text-gray-500 mt-2">
             Fades the sound out after this long. The light keeps running.
           </p>
+
+          <label class="flex items-center justify-between gap-4 cursor-pointer mt-4">
+            <span>
+              <span class="block text-sm font-medium">Start sound at bedtime</span>
+              <span class="block text-xs text-gray-500 mt-1">
+                Plays the chosen sound when story time begins; stops at “okay to get up”.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              :checked="settings.ambientAutoStart"
+              @change="emit('update-toggle', 'ambientAutoStart', checked($event))"
+              class="chime-toggle shrink-0"
+              aria-label="Start sound at bedtime"
+            >
+          </label>
         </div>
 
         <!-- Colors and Brightness -->
         <div class="mb-6">
           <h3 class="text-sm font-medium mb-1">Colors &amp; brightness</h3>
           <p class="text-xs text-gray-500 mb-3">Tap Preview to see any color fill the screen.</p>
+
+          <label class="flex items-center justify-between gap-4 cursor-pointer mb-4">
+            <span>
+              <span class="block text-sm font-medium">Show picture</span>
+              <span class="block text-xs text-gray-500 mt-1">
+                A simple moon-and-sun scene little ones can read. Off: just the glow.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              :checked="settings.sceneEnabled"
+              @change="emit('update-toggle', 'sceneEnabled', checked($event))"
+              class="chime-toggle shrink-0"
+              aria-label="Show picture"
+            >
+          </label>
 
           <div
             v-for="mode in modes"
@@ -529,24 +554,6 @@ const confirmReset = () => {
   50% { opacity: 0.3; }
 }
 
-.timer-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.timer-chip {
-  @apply bg-gray-800/60 hover:bg-gray-700 text-gray-200 text-sm rounded-lg transition-colors;
-  min-width: 44px;
-  min-height: 40px;
-  padding: 0 0.6rem;
-  touch-action: manipulation;
-}
-
-.timer-chip--active {
-  @apply bg-blue-600 text-white;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .sound-playing {
     animation: none;
@@ -559,49 +566,4 @@ input[type="range"] {
   touch-action: manipulation;
 }
 
-/* iOS-style toggle switch with a comfortable touch target */
-.chime-toggle {
-  appearance: none;
-  -webkit-appearance: none;
-  position: relative;
-  width: 52px;
-  height: 32px;
-  border-radius: 9999px;
-  background: #4b5563;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  touch-action: manipulation;
-}
-
-.chime-toggle::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 26px;
-  height: 26px;
-  border-radius: 9999px;
-  background: #fff;
-  transition: transform 0.2s ease;
-}
-
-.chime-toggle:checked {
-  background: #34c759;
-}
-
-.chime-toggle:checked::after {
-  transform: translateX(20px);
-}
-
-.chime-toggle:focus-visible {
-  outline: 2px solid #60a5fa;
-  outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chime-toggle,
-  .chime-toggle::after {
-    transition: none;
-  }
-}
 </style>

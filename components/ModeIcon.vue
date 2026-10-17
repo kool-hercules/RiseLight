@@ -14,9 +14,16 @@ defineProps<{ name: ModeIconName }>()
     stroke-linejoin="round"
     aria-hidden="true"
   >
+    <!-- Story time: open book -->
+    <template v-if="name === 'book'">
+      <path d="M12 6.5C10.2 5.2 7.7 4.6 4 4.8v12.6c3.7-.2 6.2.4 8 1.7" />
+      <path d="M12 6.5c1.8-1.3 4.3-1.9 8-1.7v12.6c-3.7-.2-6.2.4-8 1.7" />
+      <path d="M12 6.5v12.6" />
+    </template>
+
     <!-- Stay in bed: moon -->
     <path
-      v-if="name === 'moon'"
+      v-else-if="name === 'moon'"
       d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
     />
 

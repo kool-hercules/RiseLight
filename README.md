@@ -6,36 +6,53 @@ like the Hatch. Built with Vue 3 + Nuxt 3, installable as a PWA.
 
 ## Features
 
-- **Full-screen glow**: a radial-gradient light fills the screen, its color and
-  brightness tuned per phase.
-- **Three phases on a nightly schedule**:
-  - **Stay in bed** — a dim, low-blue-light red through the night.
-  - **Almost time** — eases to amber during the wake-up window.
-  - **Okay to get up!** — a gentle green once it's time to rise.
-  The wake-up window is a continuous sunrise ramp between these colors, not a
-  hard switch.
+- **A daily routine that runs itself**: no nightly tap. Every day the light
+  moves through
+  - **Story time**: a warm, soft amber to wind down before lights out.
+  - **Stay in bed**: a dim, low-blue-light red through the night.
+  - **Almost time**: a continuous sunrise ramp through amber during the wake-up
+    window.
+  - **Okay to get up!**: a gentle green, held for a set time, then the screen
+    goes quiet (near-black, dim clock) for the day.
+- **Weekly schedule**: bedtime and sunrise start per day, with "Same every
+  day", "Weekdays & weekends" and "Custom" presets. The editor shows when each
+  morning turns green.
+- **One-tap nap**: night → short sunrise → 15 minutes of green. A nap that runs
+  into the evening routine hands straight back to it with no green.
+- **Off for now / Start now**: switch off until the routine's next step (the
+  morning cue still comes), or start the night early. Start now right after
+  Off for now is an undo: the schedule carries on where it was.
+- **Kid-first screen with a child lock**: the kid screen is purely visual -- a
+  glow and a simple scene (lamp and book, moon and sleeping friend, sun rising
+  over hills, full sun) painted only in the current light colour. Parent
+  controls open by holding the clock for 3 seconds and hide themselves again.
+  They carry quick brightness and volume sliders for 2 AM adjustments.
 - **Ambient sounds**: white / pink / brown noise plus rain, ocean, fan, wind,
-  and a soft heartbeat — all **synthesized in the browser** (no audio files,
-  perfect infinite loops, fully offline), with a master **volume** control and a
-  **sleep timer** that fades the sound out while the light keeps running.
+  and a soft heartbeat, all **synthesized in the browser** (no audio files,
+  perfect infinite loops, fully offline), with volume and a fading **sleep
+  timer**. Optionally starts by itself at story time and stops at "okay to get
+  up".
 - **Okay-to-get-up chime**: an optional gentle chime at the wake transition.
 - **Installable PWA**: add to home screen, runs full-screen and **offline**
-  (offline app-shell service worker).
-- **Stays awake**: holds a screen wake lock so the light never sleeps — designed
-  to sit plugged in at the bedside with the screen on.
-- **Customizable**: wake time, wake-up window length, per-phase color and
-  brightness, with a live full-screen **preview**.
-- **Touch- and tablet-friendly**, safe-area aware, with keyboard shortcuts
-  (Space toggles the light, Cmd/Ctrl+S opens settings, Esc closes).
+  after a single online visit.
+- **Stays awake**: holds a screen wake lock while the routine is armed, and
+  warns if the browser can't.
+- **Customizable**: per-phase colour and brightness with a live full-screen
+  **preview**, story-time length, wake-up window, how long green shows.
 
 ## How it works
 
-1. Pick your wake-up time (and optionally a sound) in settings.
-2. Tap **Turn On**. The light shows "Stay in bed" through the night.
-3. As the wake-up time approaches, it eases through "Almost time" and lands on
-   "Okay to get up!" — chiming if enabled.
-4. Turning off silences the sound and light together; your sound choice is
-   remembered for next time.
+1. Set bedtimes and sunrise times (and optionally a sound) in settings. Green
+   ("okay to get up") comes one wake-up window after the sunrise starts.
+2. Leave RiseLight open, on screen and plugged in by the bed. It runs story
+   time → stay in bed → almost time → okay to get up every day on its own.
+3. To open the parent controls, **hold the clock for 3 seconds** (or turn the
+   child lock off in settings so any tap opens them). They hide after 15
+   seconds; settings and help close themselves after a minute.
+4. On iPhone/iPad, turn on **Guided Access** to keep little fingers in the app.
+
+If the browser blocks a scheduled sound or chime (no recent tap), a tiny dim
+speaker badge appears; the next tap anywhere turns sound back on.
 
 ## Development
 
@@ -47,16 +64,30 @@ npm test          # run the unit tests (vitest)
 npm run typecheck # type-check
 ```
 
-QA tip: append `?clock=06:29&rate=120` to the URL to simulate/accelerate the
-schedule so the whole night → wake → okay cycle plays out in seconds.
+QA tips:
+
+- `?clock=06:29&rate=120` starts the simulated clock at 06:29 today and runs it
+  120× faster, so a 30-minute wake window plays out in 15 seconds.
+- `?clock=2026-10-17T05:50` starts at a full local date and time, to test a
+  specific weekday's schedule row (e.g. a Saturday wake-up).
+- `?clock=2026-10-16T19:05&rate=240` walks a whole evening: story time → night.
+- Fresh `localStorage` shows the first-run parent controls pinned open; left
+  untouched they hand back to the kid screen after two minutes.
+- `npm test` pins `TZ=America/New_York` so the DST cases really cross DST.
 
 ## Technical details
 
 - **Vue 3 Composition API + Nuxt 3**, statically generated (`ssr: false`,
   Nitro `static` preset) and deployed to Netlify.
 - **Tailwind CSS**, **TypeScript**.
+- The routine is a **pure function** (`utils/routine.ts`): `resolvePhase(now,
+  settings, override)` derives the phase on every tick from the weekly schedule
+  plus at most one override (`on` / `nap` / `off`), so edits and reloads always
+  land on the right phase. Built on local calendar dates, so DST is handled by
+  `Date`.
 - State lives in **module-singleton composables** (`useSettings`, `useAmbient`,
-  …), persisted to **localStorage** with schema versioning and validation. (The
+  …), persisted to **localStorage** with schema versioning, validation and
+  migration (settings v2; the override in its own key). (The
   audio engines are framework-agnostic and unit-tested with fake AudioContexts.)
 - **Web Audio API** for the chime (`utils/chime.ts`) and ambient sounds
   (`utils/ambient.ts`) — no audio assets shipped.
@@ -73,10 +104,12 @@ later; it needs no rewrite.
 ## Project structure
 
 ```
-├── components/        NightLight, SettingsPanel, OnboardingOverlay, icons
-├── composables/       useNightLight, useSettings, useAmbient, useChime, useWakeLock, useOnboarding
-├── pages/index.vue    wires composables to components
-├── utils/             pure logic: schedule, ramp, settings, ambient, chime, session, …
+├── components/        NightLight (kid layer), KidScene, ParentControls, HoldToUnlock,
+│                      SettingsPanel, ScheduleEditor, HelpPopover, icons
+├── composables/       useNightLight, useSettings, useAmbient, useChime, useWakeLock,
+│                      useKeepAwake, useWakeAlarm, useOnboarding
+├── pages/index.vue    wires composables to components and side effects
+├── utils/             pure logic: routine, override, ramp, settings, alarm, ambient, chime, …
 ├── public/            manifest, service worker, icons, sounds/ (optional recordings)
 └── tests/             vitest suites
 ```

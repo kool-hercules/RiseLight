@@ -4,17 +4,22 @@ import {
   onUnmounted,
   readonly,
   ref,
-  watch,
+  shallowRef,
   type Ref
 } from 'vue'
-import type { LightColor, LightMode, LightState, Settings, TimerInfo } from '../types'
-import { MODE_PRESENTATION } from '../utils/modes'
+import type { LightColor, LightMode, LightState, Settings } from '../types'
 import { createDevClock } from '../utils/devClock'
-import { rampBrightness, rampColor } from '../utils/ramp'
-import { formatClockTime, humanizeCountdown } from '../utils/time'
-import { calculateNextWakeTime, calculateScheduleState } from '../utils/schedule'
-import { clearActiveSession, readActiveSession, saveActiveSession } from '../utils/session'
+import { readOverride, saveOverride } from '../utils/override'
+import {
+  isOverrideActive,
+  phaseDisplay,
+  resolvePhase,
+  upcomingNight,
+  type Override,
+  type ResolvedPhase
+} from '../utils/routine'
 import { getBrowserStorage, type StorageLike } from '../utils/settings'
+import { formatClockTime, humanizeCountdown } from '../utils/time'
 
 type IntervalHandle = unknown
 
@@ -25,6 +30,11 @@ export type NightLightDependencies = {
   storage?: StorageLike | null
 }
 
+const isLitState = (state: LightState): boolean => state !== 'inactive'
+
+// The live runtime: a ticking clock, the single persisted override, and the
+// phase derived from both plus settings by the pure routine engine. Nothing
+// else is stored, so edits and reloads always land on the right phase.
 export const createNightLightRuntime = (
   settings: Readonly<Ref<Settings>>,
   dependencies: NightLightDependencies = {}
@@ -36,37 +46,29 @@ export const createNightLightRuntime = (
     ?? (handle => globalThis.clearInterval(handle as ReturnType<typeof globalThis.setInterval>))
   const storage = dependencies.storage === undefined ? getBrowserStorage() : dependencies.storage
 
-  const currentTime = ref(new Date(now().getTime()))
-  const isActive = ref(false)
-  const currentState = ref<LightState>('inactive')
-  const timeRemaining = ref(0)
-  const nextWakeTime = ref<Date | null>(null)
+  const currentTime = shallowRef(new Date(now().getTime()))
+  const override = shallowRef<Override | null>(null)
   const previewMode = ref<LightMode | null>(null)
   let clockInterval: IntervalHandle | null = null
 
-  const resetToInactive = (): void => {
-    isActive.value = false
-    currentState.value = 'inactive'
-    nextWakeTime.value = null
-    timeRemaining.value = 0
-  }
+  const phase = computed<ResolvedPhase>(() =>
+    resolvePhase(currentTime.value, settings.value, override.value)
+  )
 
-  const updateLightState = (at: Date = now()): void => {
-    currentTime.value = new Date(at.getTime())
-
-    if (!isActive.value || !nextWakeTime.value) {
-      currentState.value = 'inactive'
-      timeRemaining.value = 0
-      return
-    }
-
-    const schedule = calculateScheduleState(at, nextWakeTime.value, settings.value.wakeDuration)
-    currentState.value = schedule.mode
-    timeRemaining.value = schedule.timeRemaining
+  const setOverride = (next: Override | null): void => {
+    override.value = next
+    saveOverride(storage, next)
   }
 
   const refresh = (): void => {
-    updateLightState(now())
+    const at = now()
+    currentTime.value = new Date(at.getTime())
+
+    // Expired (or clock-skewed) overrides are cleared so storage never holds
+    // a stale one.
+    if (override.value && !isOverrideActive(override.value, at.getTime(), settings.value)) {
+      setOverride(null)
+    }
   }
 
   const startClock = (): void => {
@@ -87,30 +89,53 @@ export const createNightLightRuntime = (
     clockInterval = null
   }
 
-  const startNightLight = (): void => {
-    const startedAt = now()
-    currentTime.value = new Date(startedAt.getTime())
-    nextWakeTime.value = calculateNextWakeTime(
-      startedAt,
-      settings.value.wakeTime,
-      settings.value.wakeDuration
-    )
-    isActive.value = true
-    updateLightState(startedAt)
-    saveActiveSession(storage, nextWakeTime.value)
-    startClock()
+  const restore = (): void => {
+    const at = now()
+    currentTime.value = new Date(at.getTime())
+    override.value = readOverride(storage, at)
+    refresh()
   }
 
-  const stopNightLight = (): void => {
-    resetToInactive()
-    clearActiveSession(storage)
+  // "Start now": light the night from this moment until the next wake, then
+  // the usual ramp and hold. Used with auto-schedule off, or for an early night.
+  // Over a lit schedule (only reachable after Off for now) it is an undo: the
+  // schedule resumes, so story time comes back as story time, not as night.
+  const startNow = (): void => {
+    refresh()
+    if (isLitState(resolvePhase(currentTime.value, settings.value, null).state)) {
+      setOverride(null)
+      return
+    }
+    setOverride({ kind: 'on', start: currentTime.value.getTime() })
   }
 
-  const toggleNightLight = (): void => {
-    if (isActive.value) {
-      stopNightLight()
-    } else {
-      startNightLight()
+  const startNap = (minutes: number): void => {
+    refresh()
+    setOverride({ kind: 'nap', start: currentTime.value.getTime(), minutes })
+  }
+
+  const cancelOverride = (): void => {
+    setOverride(null)
+  }
+
+  // "Off for now". Cancelling an `on`/`nap` hands back to the schedule; if the
+  // schedule is itself lit at that moment, it is switched off too, so one tap
+  // always means dark. Pressed during the schedule, it stays dark until the next
+  // morning ramp (from story time / night) or until idle (from wake / awake).
+  const turnOffForNow = (): void => {
+    refresh()
+    const at = currentTime.value
+    const current = phase.value
+
+    if (current.override?.kind === 'off') {
+      return
+    }
+
+    const base = current.override ? resolvePhase(at, settings.value, null).state : current.state
+    if (isLitState(base)) {
+      setOverride({ kind: 'off', start: at.getTime(), fromPhase: base })
+    } else if (current.override) {
+      setOverride(null)
     }
   }
 
@@ -122,215 +147,83 @@ export const createNightLightRuntime = (
     previewMode.value = null
   }
 
-  const restoreSession = (): boolean => {
-    const restoredAt = now()
-    const restoredWakeTime = readActiveSession(storage, restoredAt)
-    currentTime.value = new Date(restoredAt.getTime())
-
-    if (!restoredWakeTime) {
-      resetToInactive()
-      return false
-    }
-
-    nextWakeTime.value = restoredWakeTime
-    isActive.value = true
-    updateLightState(restoredAt)
-    return true
-  }
-
-  const stopSettingsWatcher = watch(
-    () => [settings.value.wakeTime, settings.value.wakeDuration] as const,
-    ([wakeTime], [previousWakeTime]) => {
-      if (!isActive.value) {
-        return
-      }
-
-      const changedAt = now()
-      if (wakeTime !== previousWakeTime || !nextWakeTime.value) {
-        nextWakeTime.value = calculateNextWakeTime(
-          changedAt,
-          wakeTime,
-          settings.value.wakeDuration
-        )
-        saveActiveSession(storage, nextWakeTime.value)
-      }
-
-      updateLightState(changedAt)
-    },
-    { flush: 'sync' }
+  const currentState = computed<LightState>(() => phase.value.state)
+  const isLit = computed(() => isLitState(phase.value.state))
+  const activeOverride = computed(() => phase.value.override)
+  // Armed = the device is responsible for something coming up, so the screen
+  // must stay awake: the routine runs by itself, or an on/nap is in progress.
+  const isArmed = computed(() =>
+    settings.value.autoSchedule
+    || (phase.value.override !== null && phase.value.override.kind !== 'off')
   )
+  const progress = computed(() => phase.value.progress)
 
-  const displayMode = computed<LightMode | null>(() => {
+  const display = computed(() => {
     if (previewMode.value) {
-      return previewMode.value
+      return {
+        color: settings.value.colors[previewMode.value],
+        brightness: settings.value.brightness[previewMode.value] / 100
+      }
     }
-
-    return currentState.value === 'inactive' ? null : currentState.value
+    return phaseDisplay(phase.value, settings.value, currentTime.value)
   })
 
-  const currentColor = computed<LightColor>(() => {
-    return displayMode.value ? settings.value.colors[displayMode.value] : '#ffffff'
-  })
-
-  const getCurrentBrightness = computed(() => {
-    return displayMode.value ? settings.value.brightness[displayMode.value] / 100 : 0
-  })
-
-  // How far we are through the live wake window: 0 at its start, 1 at its end.
-  // Only meaningful (and non-zero) while the schedule is actually in the wake
-  // state; previews and the flat night/awake states don't ramp.
-  const rampProgress = computed(() => {
-    if (previewMode.value || currentState.value !== 'wake') {
-      return 0
-    }
-
-    const windowMs = settings.value.wakeDuration * 60 * 1000
-    if (windowMs <= 0) {
-      return 1
-    }
-
-    return Math.min(1, Math.max(0, 1 - timeRemaining.value / windowMs))
-  })
-
-  // What actually paints the screen. Identical to the discrete color/brightness
-  // everywhere except the live wake window, where it eases continuously through
-  // the night → wake → awake keyframes so there is no hard color swap.
-  const displayColor = computed<LightColor>(() => {
-    if (!displayMode.value) {
-      return '#ffffff'
-    }
-
-    if (!previewMode.value && currentState.value === 'wake') {
-      return rampColor(rampProgress.value, settings.value.colors)
-    }
-
-    return settings.value.colors[displayMode.value]
-  })
-
-  const displayBrightness = computed(() => {
-    if (!displayMode.value) {
-      return 0
-    }
-
-    if (!previewMode.value && currentState.value === 'wake') {
-      return rampBrightness(rampProgress.value, settings.value.brightness) / 100
-    }
-
-    return settings.value.brightness[displayMode.value] / 100
-  })
-
+  const displayColor = computed<LightColor>(() => display.value.color)
+  const displayBrightness = computed(() => display.value.brightness)
   const isPreviewMode = computed(() => previewMode.value !== null)
 
-  const formatTimeRemaining = computed(() => {
-    if (timeRemaining.value <= 0) {
-      return '00:00:00'
-    }
-
-    const totalSeconds = Math.floor(timeRemaining.value / 1000)
-    const hours = Math.floor(totalSeconds / 3600)
-    const minutes = Math.floor((totalSeconds % 3600) / 60)
-    const seconds = totalSeconds % 60
-
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-  })
+  const timeRemaining = computed(() =>
+    phase.value.phaseEnd === null ? 0 : Math.max(0, phase.value.phaseEnd - currentTime.value.getTime())
+  )
 
   // Calm, spoken-language countdown for the wake window ("in about 15 minutes").
   const humanTimeRemaining = computed(() => humanizeCountdown(timeRemaining.value))
 
-  const formatNextWakeTime = computed(() => {
-    if (!isActive.value || !nextWakeTime.value) {
-      return ''
-    }
+  // "Tonight's plan": the night running now, or the next one. Uses the runtime
+  // clock so a dev/QA clock is honored.
+  const plan = computed(() => upcomingNight(currentTime.value, settings.value))
 
-    return formatClockTime(nextWakeTime.value)
+  const okayTimeLabel = computed(() => {
+    const okayAt = phase.value.okayAt
+    return formatClockTime(okayAt !== null ? new Date(okayAt) : plan.value.okayAt)
   })
-
-  // The two schedule anchors, derived from settings so they are available even
-  // when the light is off (for "tonight's plan"): when "almost time" starts
-  // (the configured wake time) and when it becomes "okay to get up" (that time
-  // plus the wake-up window). Uses the runtime clock so a dev/QA clock is honored.
-  const scheduleAnchor = (extraMinutes: number): Date => {
-    const [hours, minutes] = settings.value.wakeTime.split(':').map(Number)
-    const at = new Date(now().getTime())
-    at.setHours(hours, minutes + extraMinutes, 0, 0)
-    return at
-  }
-
-  const almostTimeLabel = computed(() => formatClockTime(scheduleAnchor(0)))
-  const okayTimeLabel = computed(() => formatClockTime(scheduleAnchor(settings.value.wakeDuration)))
-
-  // Retained for compatibility; equals okayTimeLabel while active.
-  const formatOkayToRiseTime = computed(() => (isActive.value ? okayTimeLabel.value : ''))
-
-  const statusMessage = computed(() => {
-    if (previewMode.value) {
-      return `Previewing “${MODE_PRESENTATION[previewMode.value].label}”`
-    }
-
-    if (!isActive.value) {
-      return 'Light is off'
-    }
-
-    switch (currentState.value) {
-      case 'night':
-        return `Stay in bed — okay to get up at ${okayTimeLabel.value}`
-      case 'wake':
-        return `Almost time — okay to get up ${humanTimeRemaining.value}`
-      case 'awake':
-        return 'Okay to get up — good morning!'
-      default:
-        return 'Light is off'
-    }
-  })
-
-  const timerInfo = computed<TimerInfo>(() => ({
-    currentTime: currentTime.value,
-    nextWakeTime: nextWakeTime.value,
-    timeRemaining: timeRemaining.value,
-    currentState: currentState.value,
-    currentColor: currentColor.value,
-    isActive: isActive.value
-  }))
 
   const dispose = (): void => {
     stopClock()
-    stopSettingsWatcher()
   }
 
   return {
     currentTime: readonly(currentTime),
-    isActive: readonly(isActive),
-    currentState: readonly(currentState),
-    currentColor,
+    phase,
+    currentState,
+    isLit,
+    isArmed,
+    override: readonly(override),
+    activeOverride,
+    progress,
     displayColor,
     displayBrightness,
-    rampProgress,
-    timeRemaining: readonly(timeRemaining),
-    nextWakeTime: readonly(nextWakeTime),
+    timeRemaining,
+    humanTimeRemaining,
+    plan,
+    okayTimeLabel,
     previewMode: readonly(previewMode),
     isPreviewMode,
-    timerInfo,
-    formatTimeRemaining,
-    humanTimeRemaining,
-    almostTimeLabel,
-    okayTimeLabel,
-    getCurrentBrightness,
-    formatNextWakeTime,
-    formatOkayToRiseTime,
-    statusMessage,
     startClock,
     stopClock,
     refresh,
-    startNightLight,
-    stopNightLight,
-    toggleNightLight,
+    restore,
+    startNow,
+    startNap,
+    turnOffForNow,
+    cancelOverride,
     startPreview,
     stopPreview,
-    restoreSession,
-    updateLightState,
     dispose
   }
 }
+
+export type NightLightRuntime = ReturnType<typeof createNightLightRuntime>
 
 export const useNightLight = (settings: Readonly<Ref<Settings>>) => {
   // Opt into an accelerated QA clock when the URL asks for one; otherwise the
@@ -341,6 +234,12 @@ export const useNightLight = (settings: Readonly<Ref<Settings>>) => {
 
   const runtime = createNightLightRuntime(settings, devNow ? { now: devNow } : {})
 
+  // Restore before first paint so a mid-night reload never flashes the wrong
+  // phase (the schedule itself needs no restoring).
+  if (typeof window !== 'undefined') {
+    runtime.restore()
+  }
+
   const handleVisibilityChange = (): void => {
     if (document.visibilityState === 'visible') {
       runtime.refresh()
@@ -348,7 +247,6 @@ export const useNightLight = (settings: Readonly<Ref<Settings>>) => {
   }
 
   onMounted(() => {
-    runtime.restoreSession()
     runtime.startClock()
     document.addEventListener('visibilitychange', handleVisibilityChange)
   })

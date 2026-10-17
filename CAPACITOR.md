@@ -6,7 +6,7 @@ a PWA fundamentally can't do:
 
 - **Background / locked-screen audio** — play white noise, rain, etc. all night
   with the screen dark (a PWA's AudioContext is suspended when backgrounded).
-- **Local notification alarms** when the app is closed (a follow-up — see below).
+- **Local notification alarms** for the next week of "okay to get up" times, even when the app is closed (see below).
 - **App Store / Play Store presence.**
 
 The web app stays exactly as-is and keeps deploying to Netlify as a PWA; the
@@ -52,22 +52,26 @@ npx cap open android      # open in Android Studio → run
 
 ## Alarm when the app is closed (implemented)
 
-`@capacitor/local-notifications` is wired via `composables/useWakeAlarm.ts`: when
-the light is on, it schedules an "okay to get up" notification at the wake
-transition (wake time + wake-up window) so the alarm fires even if the app is
-closed or the screen is locked. It reschedules when the wake time/window changes
-and cancels when the light is turned off. On the web PWA it's a **silent no-op**
-(`Capacitor.isNativePlatform()` is false), so the same code runs everywhere.
+`@capacitor/local-notifications` is wired via `composables/useWakeAlarm.ts`. It
+schedules the **next 7 "okay to get up" times** (IDs 1001–1007) from the routine
+engine's `upcomingOkayToWake`, so the week keeps firing even if the app stays
+closed. Every re-sync cancels all seven and reschedules, so an edited schedule
+never double-fires. It re-syncs when the schedule or an override (nap / off for
+now / start now) changes, and whenever the app returns to the foreground. On the
+web PWA it's a **silent no-op** (`Capacitor.isNativePlatform()` is false).
 
+- Sound follows the chime toggle: with the chime off the notification still
+  posts, silently (iOS: no `sound`; Android: a low-importance channel).
 - On first schedule on device it requests notification permission.
-- To verify: on a real device, turn the light on with a near-future wake time,
-  fully close the app, and confirm the notification fires. (Timing is exact via
-  the OS scheduler — it does not depend on the app running.)
+- To verify (not verifiable outside a device): set a near-future wake time,
+  fully close the app, and confirm the notification fires; then edit tomorrow's
+  wake time and confirm only the new time fires; toggle the chime and confirm
+  the sound follows.
 
 ## Keep-awake (implemented)
 
 `@capacitor-community/keep-awake` is wired via `composables/useKeepAwake.ts`:
-it holds the screen on while the light is active in the native shell (the web
+it holds the screen on while the routine is armed in the native shell (the web
 Screen Wake Lock API isn't reliable in a WKWebView; `useWakeLock` still covers
 the web PWA). No-op on web, so the same code runs everywhere. Note: pin
 `@capacitor-community/keep-awake@^5` for Capacitor 6 — its major versions are

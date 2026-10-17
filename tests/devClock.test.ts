@@ -75,4 +75,21 @@ describe('createDevClock', () => {
     real.advance(1_000)
     expect(now().getTime()).toBe(originDate.getTime() + 1_000)
   })
+
+  it('anchors to a full local date and time', () => {
+    const real = makeRealNow(originDate.getTime())
+    const now = createDevClock('?clock=2026-10-17T05:50&rate=60', real.now)!
+
+    expect(now().getTime()).toBe(new Date(2026, 9, 17, 5, 50).getTime())
+    expect(now().getDay()).toBe(6)
+    real.advance(10_000)
+    expect(now().getMinutes()).toBe(0)
+    expect(now().getHours()).toBe(6)
+  })
+
+  it('rejects impossible full datetimes', () => {
+    const real = makeRealNow(originDate.getTime())
+    expect(createDevClock('?clock=2026-02-31T05:50', real.now)!().getTime()).toBe(originDate.getTime())
+    expect(createDevClock('?clock=2026-10-17T25:00', real.now)!().getTime()).toBe(originDate.getTime())
+  })
 })

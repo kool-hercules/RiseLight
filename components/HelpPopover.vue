@@ -42,7 +42,8 @@ onMounted(() => titleRef.value?.focus())
       </div>
 
       <p class="text-sm text-gray-400 mb-4 leading-relaxed">
-        The light shows little ones — at a glance — when to stay in bed and when it’s okay to get up.
+        Every day the light runs a routine on its own, showing little ones at a glance when to wind
+        down, when to stay in bed, and when it’s okay to get up.
       </p>
 
       <ul class="space-y-3 mb-4">
@@ -60,9 +61,20 @@ onMounted(() => titleRef.value?.focus())
         </li>
       </ul>
 
-      <p class="text-xs text-gray-500 mb-4 leading-relaxed">
-        Set the wake-up time, sounds, and colors with the gear icon. Tap Turn On to start tonight’s light.
-      </p>
+      <ul class="text-xs text-gray-400 mb-4 leading-relaxed space-y-2 list-disc pl-4">
+        <li>Set bedtimes and wake-up times for each day, sounds and colors with the gear icon.</li>
+        <li>
+          <span class="text-gray-300">Child lock:</span> the kid screen has no buttons. Hold the clock
+          for 3 seconds to open the parent controls; they hide again on their own.
+        </li>
+        <li>
+          <span class="text-gray-300">Nap</span> starts a nap now; <span class="text-gray-300">Off for now</span>
+          darkens the light until the routine’s next step; <span class="text-gray-300">Start now</span> begins
+          the night early.
+        </li>
+        <li>Keep RiseLight open, on screen and plugged in. On iPhone or iPad, turn on Guided Access
+          (Settings › Accessibility) to keep little fingers inside the app.</li>
+      </ul>
 
       <button @click="emit('close')" class="w-full control-button">Got it</button>
     </div>

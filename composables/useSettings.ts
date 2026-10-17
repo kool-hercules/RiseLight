@@ -1,14 +1,19 @@
 import { readonly, ref, watch } from 'vue'
-import type { AmbientSoundId, Settings } from '../types'
+import type { AmbientSoundId, DaySchedule, Settings } from '../types'
 import {
   createDefaultSettings,
   getBrowserStorage,
   isValidAmbientSound,
+  isValidAwakeHold,
+  isValidBedtime,
   isValidBrightness,
   isValidColor,
+  isValidDaySchedule,
   isValidDuration,
+  isValidMorningWake,
+  isValidNapMinutes,
   isValidSleepTimer,
-  isValidWakeTime,
+  isValidWindDown,
   loadSettingsFromStorage,
   normalizeWakeTime,
   parseSettingsJson,
@@ -55,10 +60,54 @@ const loadSettings = (): void => {
 
 watch(settingsState, scheduleSave, { deep: true })
 
-const updateWakeTime = (time: string): void => {
-  if (isValidWakeTime(time)) {
-    settingsState.value.wakeTime = normalizeWakeTime(time)
+// Edit one day's wake time or bedtime. Out-of-range values are ignored so the
+// routine engine's "every night crosses midnight once" invariant always holds.
+const updateDaySchedule = (day: number, patch: Partial<DaySchedule>): void => {
+  const entry = settingsState.value.schedule[day]
+  if (!entry) {
+    return
   }
+  if (patch.wakeTime !== undefined && isValidMorningWake(patch.wakeTime)) {
+    entry.wakeTime = normalizeWakeTime(patch.wakeTime)
+  }
+  if (patch.bedtime !== undefined && isValidBedtime(patch.bedtime)) {
+    entry.bedtime = normalizeWakeTime(patch.bedtime)
+  }
+}
+
+// Replace the whole week (used by the presets). All-or-nothing.
+const updateSchedule = (schedule: readonly DaySchedule[]): void => {
+  if (schedule.length !== 7 || !schedule.every(isValidDaySchedule)) {
+    return
+  }
+  settingsState.value.schedule = schedule.map(day => ({
+    wakeTime: normalizeWakeTime(day.wakeTime),
+    bedtime: normalizeWakeTime(day.bedtime)
+  }))
+}
+
+const updateWindDownMinutes = (minutes: number): void => {
+  if (isValidWindDown(minutes)) {
+    settingsState.value.windDownMinutes = minutes
+  }
+}
+
+const updateAwakeHoldMinutes = (minutes: number): void => {
+  if (isValidAwakeHold(minutes)) {
+    settingsState.value.awakeHoldMinutes = minutes
+  }
+}
+
+const updateLastNapMinutes = (minutes: number): void => {
+  if (isValidNapMinutes(minutes)) {
+    settingsState.value.lastNapMinutes = minutes
+  }
+}
+
+type ToggleKey = 'autoSchedule' | 'ambientAutoStart' | 'childLock' | 'sceneEnabled'
+
+const updateToggle = (key: ToggleKey, enabled: boolean): void => {
+  settingsState.value[key] = Boolean(enabled)
 }
 
 const updateWakeDuration = (duration: number): void => {
@@ -130,8 +179,13 @@ const settingsApi = {
   saveFailed: readonly(saveFailed),
   loadSettings,
   saveSettings,
-  updateWakeTime,
+  updateDaySchedule,
+  updateSchedule,
   updateWakeDuration,
+  updateWindDownMinutes,
+  updateAwakeHoldMinutes,
+  updateLastNapMinutes,
+  updateToggle,
   updateBrightness,
   updateColor,
   updateChimeEnabled,
@@ -142,7 +196,8 @@ const settingsApi = {
   resetSettings,
   exportSettings,
   importSettings,
-  isValidWakeTime,
+  isValidMorningWake,
+  isValidBedtime,
   isValidDuration,
   isValidBrightness,
   isValidColor,

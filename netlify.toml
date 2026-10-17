@@ -8,4 +8,7 @@
   status = 200
 
 [build.environment]
-  NODE_VERSION = "20" 
+  NODE_VERSION = "20"
+  # npm 10 (bundled with Node 20) crashes resolving vitest's optional peers
+  # ("Cannot read properties of null (reading 'edgesOut')"); npm 11 does not.
+  NPM_VERSION = "11" 
