@@ -6,10 +6,11 @@ export type LightMode = 'bedtime' | 'night' | 'wake' | 'awake'
 // 'inactive' means daytime idle (or switched off for now).
 export type LightState = 'inactive' | LightMode
 
-// One day's routine. `bedtime` is that evening's lights-out; `wakeTime` is that
-// day's morning. Night D runs from bedtime(D) to wakeTime(D+1).
+// One day's routine. `bedtime` is that evening's lights-out; `okayTime` is when
+// that day's morning turns green ("okay to get up"). The sunrise ramp starts
+// wakeDuration minutes before it. Night D runs from bedtime(D) to okayTime(D+1).
 export type DaySchedule = {
-  wakeTime: string // HH:MM, 04:00–12:00
+  okayTime: string // HH:MM, 04:00–13:00
   bedtime: string // HH:MM, 15:00–23:59
 }
 
@@ -48,7 +49,7 @@ export type Settings = {
   // Indexed by Date.getDay() (0 = Sunday). An array, not a Record, so JSON keys
   // never turn into strings.
   schedule: readonly DaySchedule[]
-  wakeDuration: number // minutes
+  wakeDuration: number // minutes of sunrise ramp before okayTime, 1–60
   windDownMinutes: number // story-time length before bedtime; 0 = off
   awakeHoldMinutes: number // how long "okay to get up" shows before going idle
   autoSchedule: boolean // run the routine automatically every day

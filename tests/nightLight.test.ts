@@ -111,7 +111,7 @@ describe('the routine runs by itself', () => {
   it('applies schedule edits immediately', () => {
     const { runtime, settings } = createRuntime(localDate(17, 6, 40))
     expect(runtime.currentState.value).toBe('wake')
-    settings.value.schedule = createDefaultSchedule('07:00')
+    settings.value.schedule = createDefaultSchedule('07:30')
     expect(runtime.currentState.value).toBe('night')
     runtime.dispose()
   })
@@ -284,7 +284,7 @@ describe('plan labels', () => {
   it('derives tonight’s okay-to-get-up time from the schedule', () => {
     const { runtime, settings } = createRuntime(localDate(16, 12))
     expect(runtime.okayTimeLabel.value).toMatch(/7:00\s?AM/i)
-    settings.value.schedule = createDefaultSchedule('06:45')
+    settings.value.schedule = createDefaultSchedule('07:15')
     expect(runtime.okayTimeLabel.value).toMatch(/7:15\s?AM/i)
     expect(runtime.plan.value.bedtime.getHours()).toBe(19)
     runtime.dispose()

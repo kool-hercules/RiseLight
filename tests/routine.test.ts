@@ -21,7 +21,7 @@ const at = (day: number, hours: number, minutes = 0, month = 9): Date =>
 
 const MIN = 60_000
 
-// Defaults: bedtime 19:30, wind-down 20, wake 06:30, window 30, hold 60.
+// Defaults: bedtime 19:30, wind-down 20, okay 07:00 (sunrise 06:30), window 30, hold 60.
 const makeSettings = (patch: Partial<Settings> = {}): Settings => ({ ...createDefaultSettings(), ...patch })
 
 const stateAt = (date: Date, settings = makeSettings(), override: Override | null = null) =>
@@ -67,15 +67,15 @@ describe('resolvePhase: schedule boundaries', () => {
   it('uses each day’s own row: Friday night → Saturday morning differ from weekdays', () => {
     const split = makeSettings({
       schedule: buildSplitSchedule(
-        { wakeTime: '06:30', bedtime: '19:30' },
-        { wakeTime: '07:30', bedtime: '20:30' }
+        { okayTime: '07:00', bedtime: '19:30' },
+        { okayTime: '08:00', bedtime: '20:30' }
       )
     })
     // Thursday evening uses the weekday bedtime; Friday evening the weekend one.
     expect(stateAt(at(15, 19, 30), split)).toBe('night')
     expect(stateAt(at(16, 19, 30), split)).toBe('inactive')
     expect(stateAt(at(16, 20, 10), split)).toBe('bedtime')
-    // Friday morning wakes at 06:30; Saturday morning at 07:30.
+    // Friday morning's sunrise starts 06:30 (green 07:00); Saturday's 07:30 (green 08:00).
     expect(stateAt(at(16, 6, 45), split)).toBe('wake')
     expect(stateAt(at(17, 6, 45), split)).toBe('night')
     expect(stateAt(at(17, 7, 45), split)).toBe('wake')
@@ -89,7 +89,7 @@ describe('resolvePhase: schedule boundaries', () => {
 
   it('lets the later night win where an awake hold overlaps the next wind-down', () => {
     const overlap = makeSettings({
-      schedule: createDefaultSchedule('12:00', '15:00'),
+      schedule: createDefaultSchedule('13:00', '15:00'),
       wakeDuration: 60,
       awakeHoldMinutes: 120,
       windDownMinutes: 30
@@ -98,6 +98,30 @@ describe('resolvePhase: schedule boundaries', () => {
     expect(stateAt(at(17, 14, 0), overlap)).toBe('awake')
     expect(stateAt(at(17, 14, 30), overlap)).toBe('bedtime')
     expect(stateAt(at(17, 15, 0), overlap)).toBe('night')
+  })
+
+  it('keeps green fixed and moves the sunrise start when the wake-up window changes', () => {
+    for (const wakeDuration of [1, 15, 30, 60]) {
+      const settings = makeSettings({ wakeDuration })
+      expect(stateAt(at(17, 6, 59), settings)).toBe('wake')
+      expect(stateAt(at(17, 7), settings)).toBe('awake')
+      expect(stateAt(new Date(at(17, 7).getTime() - wakeDuration * MIN), settings)).toBe('wake')
+      expect(stateAt(new Date(at(17, 7).getTime() - wakeDuration * MIN - 1), settings)).toBe('night')
+      expect(resolvePhase(at(16, 23), settings, null).okayAt).toBe(at(17, 7).getTime())
+    }
+  })
+
+  it('handles the bounds: green at 04:00 with an hour of sunrise, and green at 13:00', () => {
+    const early = makeSettings({ schedule: createDefaultSchedule('04:00', '23:59'), wakeDuration: 60 })
+    expect(stateAt(at(17, 2, 59), early)).toBe('night')
+    expect(stateAt(at(17, 3), early)).toBe('wake')
+    expect(stateAt(at(17, 4), early)).toBe('awake')
+    expect(resolvePhase(at(17, 2), early, null).phaseStart).toBe(at(16, 23, 59).getTime())
+
+    const late = makeSettings({ schedule: createDefaultSchedule('13:00') })
+    expect(stateAt(at(17, 12, 29), late)).toBe('night')
+    expect(stateAt(at(17, 12, 30), late)).toBe('wake')
+    expect(stateAt(at(17, 13), late)).toBe('awake')
   })
 
   it('is always inactive with autoSchedule off', () => {
@@ -137,6 +161,24 @@ describe('resolvePhase: DST', () => {
   })
 })
 
+describe('resolvePhase: DST at the earliest sunrise', () => {
+  const settings = makeSettings({ schedule: createDefaultSchedule('04:00'), wakeDuration: 60 })
+
+  it('spring-forward: a 60-minute sunrise before a 04:00 green starts at 03:00 and lasts an hour', () => {
+    const phase = resolvePhase(at(8, 3, 30, 2), settings, null)
+    expect(phase.state).toBe('wake')
+    expect(phase.phaseStart).toBe(at(8, 3, 0, 2).getTime())
+    expect(phase.phaseEnd! - phase.phaseStart!).toBe(60 * MIN)
+    expect(stateAt(at(8, 4, 0, 2), settings)).toBe('awake')
+  })
+
+  it('fall-back: green still lands on 04:00 wall-clock after the repeated hour', () => {
+    expect(stateAt(at(1, 3, 59, 10), settings)).toBe('wake')
+    expect(stateAt(at(1, 4, 0, 10), settings)).toBe('awake')
+    expect(resolvePhase(at(1, 3, 30, 10), settings, null).phaseStart).toBe(at(1, 3, 0, 10).getTime())
+  })
+})
+
 describe('overrides: on', () => {
   it('runs night → wake → awake from an early start, then ends at the hold', () => {
     const settings = makeSettings({ autoSchedule: false })
@@ -149,12 +191,12 @@ describe('overrides: on', () => {
     expect(stateAt(at(17, 8), settings, on)).toBe('inactive')
   })
 
-  it('moves its end when the wake time is edited', () => {
+  it('moves its end when the okay time is edited', () => {
     const settings = makeSettings({ autoSchedule: false })
     const on: Override = { kind: 'on', start: at(16, 21).getTime() }
     expect(stateAt(at(17, 6, 40), settings, on)).toBe('wake')
 
-    settings.schedule = createDefaultSchedule('07:30')
+    settings.schedule = createDefaultSchedule('08:00')
     expect(stateAt(at(17, 6, 40), settings, on)).toBe('night')
     expect(overrideEnd(on, settings)).toBe(at(17, 9).getTime())
   })
@@ -262,7 +304,7 @@ describe('overrides: off', () => {
 
   it('during awake: never runs past tonight’s story time', () => {
     const settings = makeSettings({
-      schedule: createDefaultSchedule('12:00', '15:00'),
+      schedule: createDefaultSchedule('13:00', '15:00'),
       wakeDuration: 60,
       awakeHoldMinutes: 240,
       windDownMinutes: 60
@@ -325,8 +367,8 @@ describe('upcomingOkayToWake', () => {
   it('lists the next week of okay-to-get-up instants from each day’s row', () => {
     const settings = makeSettings({
       schedule: buildSplitSchedule(
-        { wakeTime: '06:30', bedtime: '19:30' },
-        { wakeTime: '07:30', bedtime: '20:30' }
+        { okayTime: '07:00', bedtime: '19:30' },
+        { okayTime: '08:00', bedtime: '20:30' }
       )
     })
     const times = upcomingOkayToWake(at(16, 12), settings, null, 7)

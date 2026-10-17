@@ -7,15 +7,24 @@ import { mixHex, rampBrightness, rampColor } from './ramp'
 // right phase with no anchors to re-sync.
 //
 // Night D (the evening of calendar day D) runs in segments:
-//   bedtime  bedtime(D) − windDown → bedtime(D)   ("Story time")
-//   night    bedtime(D) → wakeTime(D+1)            ("Stay in bed")
-//   wake     wakeTime(D+1) → + wakeDuration        ("Almost time", sunrise ramp)
-//   awake    → + awakeHoldMinutes                  ("Okay to get up!")
-// and is inactive (daytime idle) otherwise. Settings validation bounds bedtime
-// to 15:00–23:59 and wake to 04:00–12:00, so each night crosses midnight once
-// and only nights D−1 and D can cover any instant. Where they overlap, the
-// later night wins. Times are built on local calendar dates with setHours, so
-// DST is handled by Date itself.
+//   bedtime  bedtime(D) − windDown → bedtime(D)        ("Story time")
+//   night    bedtime(D) → okayTime(D+1) − wakeDuration ("Stay in bed")
+//   wake     → okayTime(D+1)                           ("Almost time", sunrise ramp)
+//   awake    okayTime(D+1) → + awakeHoldMinutes        ("Okay to get up!")
+// and is inactive (daytime idle) otherwise. The schedule stores the green time;
+// the ramp start is derived, so changing the wake-up window moves the sunrise
+// and keeps green fixed.
+//
+// Settings validation bounds bedtime to 15:00–23:59, okayTime to 04:00–13:00,
+// wakeDuration to 1–60, windDown to 0–60 and the hold to 1–240. So night D
+// starts no earlier than 14:00 on D, its ramp starts no earlier than 03:00 on
+// D+1 (after bedtime: every night crosses midnight exactly once), and it ends
+// no later than 17:00 on D+1. Hence only nights D−1 and D can cover any instant
+// of day D. Where they overlap (a long hold running into story time), the later
+// night wins. Times are built on local calendar dates with setHours, so DST is
+// handled by Date itself. The ramp start is okayTime minus real minutes, so the
+// ramp always lasts wakeDuration minutes; zones that jump at 02:00 never put a
+// jump inside it, since it starts at 03:00 or later.
 
 export type Override =
   | { kind: 'on'; start: number }
@@ -59,14 +68,16 @@ const atTime = (day: Date, time: string): number => {
   return at.getTime()
 }
 
+// The sunrise ramp start on `day`'s morning: its okay-to-get-up time minus the
+// wake-up window.
 const wakeOn = (day: Date, settings: Settings): number =>
-  atTime(day, settings.schedule[day.getDay()].wakeTime)
+  atTime(day, settings.schedule[day.getDay()].okayTime) - settings.wakeDuration * MINUTE
 
 const nightOf = (evening: Date, settings: Settings): Night => {
   const bedtime = atTime(evening, settings.schedule[evening.getDay()].bedtime)
   const morning = new Date(evening.getFullYear(), evening.getMonth(), evening.getDate() + 1)
-  const wakeAt = wakeOn(morning, settings)
-  const okayAt = wakeAt + settings.wakeDuration * MINUTE
+  const okayAt = atTime(morning, settings.schedule[morning.getDay()].okayTime)
+  const wakeAt = okayAt - settings.wakeDuration * MINUTE
   return {
     windStart: bedtime - settings.windDownMinutes * MINUTE,
     bedtime,
