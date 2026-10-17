@@ -223,16 +223,16 @@ describe('settings schema migration', () => {
     expect('wakeTime' in loaded).toBe(false)
   })
 
-  it('replaces an out-of-range v1 wakeTime with the default green time 07:00', () => {
+  it('replaces an out-of-range v1 wakeTime with the green v1 showed: the 06:30 default sunrise + the window', () => {
     const storage = new MemoryStorage({
       [SETTINGS_STORAGE_KEY]: JSON.stringify({ version: 1, settings: { wakeTime: '13:00' } })
     })
     expect(loadSettingsFromStorage(storage).schedule).toEqual(createDefaultSchedule('07:00'))
 
     const earlyUnversioned = new MemoryStorage({
-      [SETTINGS_STORAGE_KEY]: JSON.stringify({ wakeTime: '03:00' })
+      [SETTINGS_STORAGE_KEY]: JSON.stringify({ wakeTime: '03:00', wakeDuration: 20 })
     })
-    expect(loadSettingsFromStorage(earlyUnversioned).schedule[0].okayTime).toBe('07:00')
+    expect(loadSettingsFromStorage(earlyUnversioned).schedule[0].okayTime).toBe('06:50')
   })
 
   it('migrates a v2 week exactly: okayTime = wakeTime + wakeDuration, per day', () => {
@@ -257,7 +257,7 @@ describe('settings schema migration', () => {
     }
   })
 
-  it('migrates a v2 default week to the same 07:00 green, and bad v2 rows to the default green', () => {
+  it('migrates a v2 default week to the same 07:00 green, and bad v2 rows to the green v2 showed for them', () => {
     const v2Default = { ...createDefaultSettings(), schedule: Array.from({ length: 7 }, () => ({ wakeTime: '06:30', bedtime: '19:30' })) }
     expect(parseSettingsJson(JSON.stringify({ version: 2, settings: v2Default }))).toEqual(createDefaultSettings())
 
@@ -265,9 +265,10 @@ describe('settings schema migration', () => {
     schedule[1] = { wakeTime: '12:30', bedtime: '20:00' }
     schedule[2] = { okayTime: '08:00', bedtime: '20:00' } // not a v2 field
     const parsed = parseSettingsJson(JSON.stringify({ version: 2, settings: { ...v2Default, wakeDuration: 10, schedule } }))!
+    // v2 replaced a bad row with the 06:30 default sunrise, green 10 min later.
     expect(parsed.schedule[0]).toEqual({ okayTime: '06:40', bedtime: '19:30' })
-    expect(parsed.schedule[1]).toEqual({ okayTime: '07:00', bedtime: '20:00' })
-    expect(parsed.schedule[2]).toEqual({ okayTime: '07:00', bedtime: '20:00' })
+    expect(parsed.schedule[1]).toEqual({ okayTime: '06:40', bedtime: '20:00' })
+    expect(parsed.schedule[2]).toEqual({ okayTime: '06:40', bedtime: '20:00' })
   })
 
   it('saves a migrated v2 blob back as v3', () => {
@@ -307,6 +308,9 @@ describe('settings schema migration', () => {
 
     const v2 = { ...settings, schedule: Array.from({ length: 6 }, () => ({ wakeTime: '06:00', bedtime: '19:00' })) }
     expect(parseSettingsJson(JSON.stringify({ version: 2, settings: v2 }))?.schedule).toEqual(createDefaultSchedule())
+    // v2 fell back to the 06:30 default sunrise; keep the green it showed.
+    const v2Short = { ...v2, wakeDuration: 15 }
+    expect(parseSettingsJson(JSON.stringify({ version: 2, settings: v2Short }))?.schedule).toEqual(createDefaultSchedule('06:45'))
   })
 
   it('falls back per entry for bad schedule rows', () => {

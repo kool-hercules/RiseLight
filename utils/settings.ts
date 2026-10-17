@@ -107,10 +107,11 @@ export const OKAY_TIME_LATEST = '13:00'
 export const isValidOkayTime = (time: unknown): time is string =>
   isTimeBetween(time, minutesOfDay(OKAY_TIME_EARLIEST), minutesOfDay(OKAY_TIME_LATEST))
 
-// v1/v2 stored the sunrise *start*, bounded to 04:00–12:00. Only migration
-// reads it.
+// v1/v2 stored the sunrise *start*, bounded to 04:00–12:00, and replaced a
+// missing or bad one with a 06:30 sunrise. Only migration reads these.
 const isValidLegacyWakeTime = (time: unknown): time is string =>
   isTimeBetween(time, 4 * 60, 12 * 60)
+const LEGACY_DEFAULT_WAKE_TIME = '06:30'
 
 // HH:MM plus a few minutes, on the wall clock. Callers keep the result inside
 // the same day, so no wrap is needed in practice; wrap anyway for safety.
@@ -207,11 +208,13 @@ const settingsPayload = (stored: unknown): Payload | null => {
 
 // A stored sunrise start → the okay-to-get-up time it implied (start + the
 // wake-up window), so green lands on exactly the same minute after migration.
-// Anything outside the old 04:00–12:00 bounds becomes the default green time.
+// Anything outside the old 04:00–12:00 bounds gets the green v1/v2 showed for
+// it: the 06:30 default sunrise + the window.
 const migrateWakeTime = (wakeTime: unknown, wakeDuration: number): string =>
-  isValidLegacyWakeTime(wakeTime)
-    ? addMinutesToTime(normalizeWakeTime(wakeTime), wakeDuration)
-    : DEFAULT_OKAY_TIME
+  addMinutesToTime(
+    normalizeWakeTime(isValidLegacyWakeTime(wakeTime) ? wakeTime : LEGACY_DEFAULT_WAKE_TIME),
+    wakeDuration
+  )
 
 // v3 and v2 store a 7-day `schedule`; v1/unversioned stored one top-level
 // wakeTime, copied to every day. Bad entries fall back individually; a week of
@@ -224,7 +227,7 @@ const parseSchedule = ({ source, format }: Payload, wakeDuration: number): DaySc
   }
 
   if (!Array.isArray(source.schedule) || source.schedule.length !== 7) {
-    return fallback
+    return format === 'v2' ? createDefaultSchedule(migrateWakeTime(undefined, wakeDuration)) : fallback
   }
 
   return source.schedule.map((entry: unknown, day) => {
