@@ -326,10 +326,14 @@ export const upcomingOkayToWake = (
   }
 
   if (isOverrideActive(override, at, settings)) {
-    const okay = overrideSegments(override, settings).find(segment => segment.state === 'awake')
+    const segments = overrideSegments(override, settings)
+    const okay = segments.find(segment => segment.state === 'awake')
     if (okay) {
       candidates.add(okay.start)
     }
+    // Handing back to the schedule can itself turn the light green: a nap that
+    // ends inside a long hold just before story time shows no green of its own.
+    candidates.add(endOfSegments(override, segments))
   }
 
   // An override that is active now only affects instants before its end; past
