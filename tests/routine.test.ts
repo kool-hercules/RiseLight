@@ -215,6 +215,21 @@ describe('overrides: on', () => {
     expect(phase.progress).toBeCloseTo(0.5)
     expect(phase.phaseStart).toBe(at(17, 6, 30).getTime())
   })
+
+  it('ends its green when tonight’s story time starts', () => {
+    // Found by property 3. Green 13:00 held 4h runs into story time at 14:00;
+    // the schedule hands over to story time there, and so must Start now.
+    const settings = makeSettings({
+      schedule: createDefaultSchedule('13:00', '15:00'),
+      wakeDuration: 60,
+      awakeHoldMinutes: 240,
+      windDownMinutes: 60
+    })
+    const on: Override = { kind: 'on', start: at(16, 22).getTime() }
+    expect(stateAt(at(17, 13, 59), settings, on)).toBe('awake')
+    expect(overrideEnd(on, settings)).toBe(at(17, 14).getTime())
+    expect(stateAt(at(17, 14), settings, on)).toBe('bedtime')
+  })
 })
 
 describe('overrides: nap', () => {

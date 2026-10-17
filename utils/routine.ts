@@ -165,13 +165,14 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
     case 'on': {
       // Night until the next wake whose window hasn't already ended (so starting
       // mid-window shows "almost time", not a whole extra night). The ramp keeps
-      // its real start, so starting mid-window picks it up where it is.
+      // its real start, so starting mid-window picks it up where it is. Green
+      // hands over to tonight's story time, as the schedule's own green does.
       const wakeAt = firstWake(override.start, settings, wake => wake + durationMs > override.start)
       const okayAt = wakeAt + durationMs
       return [
         { state: 'night', start: override.start, end: Math.max(override.start, wakeAt) },
         { state: 'wake', start: wakeAt, end: okayAt },
-        { state: 'awake', start: okayAt, end: okayAt + holdMs }
+        { state: 'awake', start: okayAt, end: Math.min(okayAt + holdMs, nextWindStart(okayAt, settings)) }
       ]
     }
     case 'nap': {
