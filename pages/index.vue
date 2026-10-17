@@ -89,7 +89,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
-import type { AmbientSoundId, LightMode, LightState } from '../types'
+import type { LightMode } from '../types'
 import { useSettings } from '../composables/useSettings'
 import { useNightLight } from '../composables/useNightLight'
 import { useOnboarding } from '../composables/useOnboarding'
@@ -98,9 +98,9 @@ import { useKeepAwake } from '../composables/useKeepAwake'
 import { useChime } from '../composables/useChime'
 import { useAmbient } from '../composables/useAmbient'
 import { useWakeAlarm } from '../composables/useWakeAlarm'
-import { MODE_PRESENTATION, describePhase, stateIcon } from '../utils/modes'
+import { MODE_PRESENTATION, describePhase, isSleepPhase, stateIcon } from '../utils/modes'
 import { formatClockTime } from '../utils/time'
-import { AUDIO_UNLOCK_EVENTS, createAudioUnlocker } from '../utils/audioUnlock'
+import { useRoutineAudio } from '../composables/useRoutineAudio'
 
 const {
   settings,
@@ -179,8 +179,6 @@ const announcement = computed(() => {
   return `${/[.!?]$/.test(headline) ? headline : `${headline}.`} ${detail}`
 })
 
-const isSleepPhase = (state: LightState): boolean => state === 'bedtime' || state === 'night'
-
 // A nap makes no sense once the evening routine is under way.
 const canNap = computed(() => !isSleepPhase(phase.value.base) && !isSleepPhase(currentState.value))
 
@@ -256,87 +254,12 @@ const ambient = useAmbient()
 const activeSoundId = ambient.activeSoundId
 const isSoundPlaying = ambient.isPlaying
 
-// Browsers only let audio start under a user gesture. The routine now runs by
-// itself (no nightly tap), so when a scheduled sound or chime is blocked we
-// raise one flag; the kid screen shows a tiny dim speaker badge and the next
-// tap anywhere unlocks both players and retries the pending sound.
-const needsAudioUnlock = ref(false)
-let pendingSound: AmbientSoundId | null = null
-
-const startAmbient = async (id: AmbientSoundId): Promise<void> => {
-  if (!(await ambient.selectSound(id))) {
-    pendingSound = id
-    needsAudioUnlock.value = true
-  }
-}
-
-const autoStartAmbient = (): void => {
-  const saved = settings.value.ambientSound
-  if (settings.value.ambientAutoStart && saved) {
-    void startAmbient(saved)
-  }
-}
-
-// Must run synchronously inside the gesture: both prime() calls start before
-// any await.
-const primeAudio = async (): Promise<boolean> => {
-  const [chimeOk, ambientOk] = await Promise.all([chime.prime(), ambient.prime()])
-  return chimeOk && ambientOk
-}
-
-const unlocker = createAudioUnlocker(primeAudio)
-
-const unlockAudio = async (): Promise<void> => {
-  if (!needsAudioUnlock.value) {
-    return
-  }
-  await unlocker(async unlocked => {
-    const retry = pendingSound
-    pendingSound = null
-    if (retry && isSleepPhase(currentState.value)) {
-      await startAmbient(retry)
-    }
-    needsAudioUnlock.value = !unlocked || pendingSound !== null
-  })
-}
-
-// Story time (or lights-out with no wind-down, a manual start, or a nap)
-// starts the saved sound; morning and "off for now" stop it.
-watch(currentState, (state, previous) => {
-  if (
-    (state === 'bedtime' && previous !== 'bedtime')
-    || (state === 'night' && !isSleepPhase(previous))
-  ) {
-    autoStartAmbient()
-  }
-
-  if (state === 'awake' || (state === 'inactive' && previous !== 'awake')) {
-    pendingSound = null
-    if (isSoundPlaying.value) {
-      ambient.stopPlayback()
-    }
-  }
-
-  // Sound the chime only when the routine crosses into "okay to get up" from
-  // an earlier lit phase. Reloads into an already-green morning don't chime.
-  if (state === 'awake' && (previous === 'night' || previous === 'wake')) {
-    void chime.play().then(played => {
-      if (!played) {
-        needsAudioUnlock.value = true
-      }
-    })
-  }
-})
-
-// Turning the chime on is a tap, so try to unlock right away.
-watch(() => settings.value.chimeEnabled, enabled => {
-  if (enabled) {
-    void chime.prime().then(ok => {
-      if (!ok) {
-        needsAudioUnlock.value = true
-      }
-    })
-  }
+const { needsAudioUnlock, startAmbient, primeAudio } = useRoutineAudio({
+  currentState,
+  settings,
+  isArmed,
+  chime,
+  ambient
 })
 
 // "Start now" / "Off for now". Starting is a guaranteed gesture, so unlock
@@ -450,7 +373,6 @@ const handleContextMenu = (event: Event) => {
 
 const handleUnlockGesture = () => {
   armPanelIdle()
-  void unlockAudio()
 }
 
 onMounted(() => {
@@ -458,20 +380,6 @@ onMounted(() => {
   document.addEventListener('contextmenu', handleContextMenu)
   for (const type of AUDIO_UNLOCK_EVENTS) {
     document.addEventListener(type, handleUnlockGesture, true)
-  }
-
-  // A reload mid-routine: try to resume the bedtime sound and pre-unlock the
-  // chime. Without a gesture these usually come back blocked, which raises the
-  // unlock badge so one tap restores both.
-  if (isSleepPhase(currentState.value)) {
-    autoStartAmbient()
-  }
-  if (settings.value.chimeEnabled && isArmed.value) {
-    void chime.prime().then(ok => {
-      if (!ok) {
-        needsAudioUnlock.value = true
-      }
-    })
   }
 })
 
