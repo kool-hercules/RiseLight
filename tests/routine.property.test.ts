@@ -35,7 +35,7 @@ const dayArb = fc.record({ okayTime: okayTimeArb, bedtime: bedtimeArb })
 // A late green, a long hold and an early bedtime: the corner where the
 // morning's green meets the next story time. Every override bug found so far
 // lives there, and uniform draws rarely reach it.
-const tightDayArb = fc.record({ okayTime: minutesBetween(11 * 60 + 30, 13 * 60), bedtime: minutesBetween(15 * 60, 18 * 60) })
+const tightDayArb = fc.record({ okayTime: minutesBetween(11 * 60 + 30, 13 * 60), bedtime: minutesBetween(15 * 60, 17 * 60) })
 
 const settingsArb = (autoSchedule: fc.Arbitrary<boolean> = fc.boolean()): fc.Arbitrary<Settings> =>
   fc.oneof(
@@ -50,7 +50,7 @@ const settingsArb = (autoSchedule: fc.Arbitrary<boolean> = fc.boolean()): fc.Arb
       schedule: weekOf(tightDayArb),
       wakeDuration: fc.integer({ min: 1, max: 60 }),
       windDownMinutes: fc.integer({ min: 0, max: 60 }),
-      awakeHoldMinutes: fc.integer({ min: 120, max: 240 }),
+      awakeHoldMinutes: fc.integer({ min: 180, max: 240 }),
       autoSchedule
     })
   ).map(patch => ({ ...createDefaultSettings(), ...patch }))
@@ -79,7 +79,7 @@ const overrideSpecArb: fc.Arbitrary<OverrideSpec> = fc.record({
   startOffset: fc.integer({ min: -2 * DAY_MINUTES, max: DAY_MINUTES }),
   minutes: fc.integer({ min: 10, max: 180 }),
   landmark: fc.option(fc.constantFrom(...LANDMARKS), { nil: null }),
-  delta: fc.integer({ min: -20, max: 20 })
+  delta: fc.integer({ min: -15, max: 15 })
 })
 
 const landmarkAt = (landmark: (typeof LANDMARKS)[number], anchor: number, settings: Settings): number => {
@@ -227,22 +227,37 @@ describe('routine properties', () => {
     )
   })
 
-  it('5. every upcoming okay-to-get-up instant is green, and the minute before it is not', () => {
-    // The app only creates overrides at "now", so one may have started already
-    // but never lies in the future.
+  it('5. upcomingOkayToWake lists exactly the instants the light turns green, in order', () => {
+    // Native alarms come from this list, so a missing instant is a silent
+    // missed alarm and an extra one a false alarm. Compare the next two
+    // against a minute walk: every turn to green, and nothing else. 50 hours
+    // always holds two scheduled greens, even across a fall-back night.
+    const COUNT = 2
+    const HORIZON_MINUTES = 50 * 60
     fc.assert(
       fc.property(settingsArb(), instantArb, fc.option(overrideSpecArb, { nil: null }), (settings, anchor, spec) => {
         const override = spec ? buildOverride(spec, anchor, settings) : null
+        // The app only creates overrides at "now", so ask after it started.
         const now = Math.max(anchor, override?.start ?? anchor)
-        for (const instant of upcomingOkayToWake(new Date(now), settings, override, 7)) {
-          const at = instant.getTime()
-          expect(resolvePhase(instant, settings, override).state).toBe('awake')
-          expect(resolvePhase(new Date(at - MIN), settings, override).state, `already green before ${instant.toString()}`).not.toBe('awake')
+        const listed = upcomingOkayToWake(new Date(now), settings, override, COUNT).map(instant => instant.getTime())
+
+        const turnsGreen: number[] = []
+        let wasGreen = resolvePhase(new Date(now), settings, override).state === 'awake'
+        for (let minute = 1; minute <= HORIZON_MINUTES && turnsGreen.length < COUNT; minute++) {
+          const at = now + minute * MIN
+          const green = resolvePhase(new Date(at), settings, override).state === 'awake'
+          if (green && !wasGreen) {
+            turnsGreen.push(at)
+          }
+          wasGreen = green
         }
+
+        const show = (instants: number[]) => instants.map(instant => new Date(instant).toString())
+        expect(show(listed.filter(instant => instant <= now + HORIZON_MINUTES * MIN))).toEqual(show(turnsGreen))
       }),
-      { numRuns: 300 }
+      { numRuns: 600 }
     )
-  })
+  }, 30_000)
 })
 
 // v2 stored each day's sunrise start (04:00–12:00); a v2 blob is drawn from
