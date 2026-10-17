@@ -9,6 +9,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "test": "vitest run",
+    "e2e": "npm run generate && playwright test",
     "typecheck": "nuxt typecheck",
     "build:native": "nuxt generate && cap sync",
     "cap:sync": "cap sync",
