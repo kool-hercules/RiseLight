@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import type { LightMode } from '../types'
 import { useSettings } from '../composables/useSettings'
@@ -101,6 +101,7 @@ import { useWakeAlarm } from '../composables/useWakeAlarm'
 import { MODE_PRESENTATION, describePhase, isSleepPhase, stateIcon } from '../utils/modes'
 import { formatClockTime } from '../utils/time'
 import { useRoutineAudio } from '../composables/useRoutineAudio'
+import { useParentLayer } from '../composables/useParentLayer'
 
 const {
   settings,
@@ -182,54 +183,8 @@ const announcement = computed(() => {
 // A nap makes no sense once the evening routine is under way.
 const canNap = computed(() => !isSleepPhase(phase.value.base) && !isSleepPhase(currentState.value))
 
-// Kid screen vs parent layer. Until first-run onboarding completes, the parent
-// layer is pinned open (exempt from the lock and auto-hide); after that it
-// opens via the child-lock hold (or any tap with the lock off) and hides itself.
-const { showOnboarding: showFirstRunHint, completeOnboarding: dismissFirstRunHint } = useOnboarding()
-const showHelp = ref(false)
-const parentOpen = ref(false)
-const parentVisible = computed(() =>
-  (parentOpen.value || showFirstRunHint.value) && !isSettingsOpen.value && !showHelp.value
-)
-
-const openParent = () => {
-  parentOpen.value = true
-}
-const closeParent = () => {
-  dismissFirstRunHint()
-  parentOpen.value = false
-}
-
-// The moment first run completes, hand the open layer over to the auto-hide
-// timer instead of letting it vanish under the user's finger.
-// Sync, so closeParent (which also completes first run) can still close it.
-watch(showFirstRunHint, (pinned, wasPinned) => {
-  if (wasPinned && !pinned) {
-    parentOpen.value = true
-  }
-}, { flush: 'sync' })
-
-const openHelp = () => {
-  dismissFirstRunHint()
-  showHelp.value = true
-}
-const closeHelp = () => {
-  showHelp.value = false
-}
-
-// Any of these first interactions retires the first-run pin.
-const handleToggleSettings = () => {
-  dismissFirstRunHint()
-  toggleSettings()
-}
-
-// "How it works" from Settings: close the panel, then show the help popover.
-const handleShowHelp = () => {
-  if (isSettingsOpen.value) {
-    toggleSettings()
-  }
-  openHelp()
-}
+// First run pins the parent layer open until the first interaction.
+const { showOnboarding: showFirstRunPin, completeOnboarding: dismissFirstRunHint } = useOnboarding()
 
 // Keep the screen awake while the routine is armed — a night light that sleeps
 // is useless. useWakeLock covers the web; useKeepAwake is its native
@@ -292,105 +247,33 @@ const handleToggleSound = () => {
   }
 }
 
-// Closing settings always ends any active preview so the light never gets
-// stuck overriding the real schedule after the panel is dismissed.
-const closeSettings = () => {
-  stopPreview()
-  if (isSettingsOpen.value) {
-    toggleSettings()
-  }
-}
-
-// Settings and help auto-close after a minute untouched while the child lock is
-// on, so a panel left open can't become the kid's toy. Closing settings also
-// stops any preview. They return to the kid screen, not the parent layer.
-const PANEL_IDLE_MS = 60_000
-let panelIdleTimer: ReturnType<typeof setTimeout> | null = null
-
-const clearPanelIdle = () => {
-  if (panelIdleTimer) {
-    clearTimeout(panelIdleTimer)
-    panelIdleTimer = null
-  }
-}
-
-const armPanelIdle = () => {
-  clearPanelIdle()
-  if (settings.value.childLock && (isSettingsOpen.value || showHelp.value)) {
-    panelIdleTimer = setTimeout(() => {
-      closeHelp()
-      closeSettings()
-      parentOpen.value = false
-    }, PANEL_IDLE_MS)
-  }
-}
-
-watch(
-  () => [isSettingsOpen.value, showHelp.value, settings.value.childLock] as const,
-  armPanelIdle
-)
-
-// Keyboard shortcuts act only while the parent layer (or a panel) is open, so a
-// keyboard in reach of a child does nothing. Esc always works.
-const handleKeyDown = (event: KeyboardEvent) => {
-  armPanelIdle()
-  if (event.key === 'Escape') {
-    if (showHelp.value) {
-      closeHelp()
-    } else if (isSettingsOpen.value) {
-      closeSettings()
-    } else if (parentVisible.value) {
-      closeParent()
-    }
-    return
-  }
-
-  if (!parentVisible.value) {
-    return
-  }
-
-  switch (event.key) {
-    case ' ':
-      // Ignore repeats: a Space still held from the unlock must not toggle.
-      if (!event.repeat && !(event.target instanceof HTMLButtonElement) && !(event.target instanceof HTMLInputElement)) {
-        event.preventDefault()
-        handleToggleNightLight()
-      }
-      break
-    case 's':
-      if (event.metaKey || event.ctrlKey) {
-        event.preventDefault()
-        handleToggleSettings()
-      }
-      break
-  }
-}
+const {
+  showHelp,
+  showFirstRunHint,
+  parentVisible,
+  openParent,
+  closeParent,
+  openHelp,
+  closeHelp,
+  closeSettings,
+  handleToggleSettings,
+  handleShowHelp
+} = useParentLayer({
+  childLock: computed(() => settings.value.childLock),
+  isSettingsOpen,
+  toggleSettings,
+  stopPreview,
+  firstRun: { pinned: showFirstRunPin, dismiss: dismissFirstRunHint },
+  toggleLight: handleToggleNightLight
+})
 
 // Prevent context menu on long press (for mobile)
 const handleContextMenu = (event: Event) => {
   event.preventDefault()
 }
 
-const handleUnlockGesture = () => {
-  armPanelIdle()
-}
-
-onMounted(() => {
-  document.addEventListener('keydown', handleKeyDown)
-  document.addEventListener('contextmenu', handleContextMenu)
-  for (const type of AUDIO_UNLOCK_EVENTS) {
-    document.addEventListener(type, handleUnlockGesture, true)
-  }
-})
-
-onBeforeUnmount(() => {
-  clearPanelIdle()
-  document.removeEventListener('keydown', handleKeyDown)
-  document.removeEventListener('contextmenu', handleContextMenu)
-  for (const type of AUDIO_UNLOCK_EVENTS) {
-    document.removeEventListener(type, handleUnlockGesture, true)
-  }
-})
+onMounted(() => document.addEventListener('contextmenu', handleContextMenu))
+onBeforeUnmount(() => document.removeEventListener('contextmenu', handleContextMenu))
 </script>
 
 <style scoped>
