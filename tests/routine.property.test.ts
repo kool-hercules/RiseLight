@@ -11,7 +11,6 @@ import {
   type Override,
   type ResolvedPhase
 } from '../utils/routine'
-import { resolvePhase as resolvePhaseV2, type V2Settings } from './fixtures/routineV2'
 
 // Property tests for the routine engine. vitest pins TZ=America/New_York, and
 // instants are drawn from two 10-day windows, one around each 2026 DST change
@@ -305,17 +304,21 @@ describe('routine properties', () => {
   }, 30_000)
 })
 
-// v2 stored each day's sunrise start (04:00–12:00); a v2 blob is drawn from
-// that schema and compared minute by minute against the frozen v2 engine.
+// v2 stored each day's sunrise start (04:00–12:00). The engine reads the
+// schedule in exactly two places, nightOf (story time, lights out, sunrise and
+// green for each night) and wakeOn (the sunrise that Start now and Off for now
+// run to); everything else is derived from those instants. So a migrated blob
+// behaves exactly like v2 iff, for every night, those instants are the ones v2
+// built from its wakeTime: sunrise = wakeTime by the wall clock, green one
+// window of real minutes later.
+type V2Settings = Omit<Settings, 'schedule'> & { schedule: { wakeTime: string; bedtime: string }[] }
+
 const v2SettingsArb: fc.Arbitrary<V2Settings> = fc.record({
-  schedule: fc.array(
-    fc.record({ wakeTime: minutesBetween(4 * 60, 12 * 60), bedtime: bedtimeArb }),
-    { minLength: 7, maxLength: 7 }
-  ),
+  schedule: weekOf(fc.record({ wakeTime: minutesBetween(4 * 60, 12 * 60), bedtime: bedtimeArb })),
   wakeDuration: fc.integer({ min: 1, max: 60 }),
   windDownMinutes: fc.integer({ min: 0, max: 60 }),
   awakeHoldMinutes: fc.integer({ min: 1, max: 240 }),
-  autoSchedule: fc.boolean()
+  autoSchedule: fc.constant(true)
 }).map(patch => ({ ...createDefaultSettings(), ...patch }))
 
 const addWallMinutes = (time: string, minutes: number): string => {
@@ -323,30 +326,47 @@ const addWallMinutes = (time: string, minutes: number): string => {
   return hhmm(hours * 60 + mins + minutes)
 }
 
-describe('v2 → v3 migration properties', () => {
-  it('6. okayTime = wakeTime + wakeDuration, and the light is identical every minute of a week', () => {
-    fc.assert(
-      fc.property(
-        v2SettingsArb,
-        fc.constantFrom(...WINDOW_STARTS),
-        fc.option(overrideSpecArb, { nil: null }),
-        (v2, from, spec) => {
-          const v3 = parseSettingsJson(JSON.stringify({ version: 2, settings: v2 }))!
-          expect(v3.schedule.map(day => day.okayTime)).toEqual(v2.schedule.map(day => addWallMinutes(day.wakeTime, v2.wakeDuration)))
-          expect(v3.schedule.map(day => day.bedtime)).toEqual(v2.schedule.map(day => day.bedtime))
+const atWallTime = (day: Date, time: string): number => {
+  const [hours, minutes] = time.split(':').map(Number)
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hours, minutes).getTime()
+}
 
-          const override = spec ? buildOverride(spec, from + DAY_MINUTES * MIN, v3) : null
-          for (let minute = 0; minute <= 7 * DAY_MINUTES; minute++) {
-            const now = new Date(from + minute * MIN)
-            const before = resolvePhaseV2(now, v2, override).state
-            const after = resolvePhase(now, v3, override).state
-            if (before !== after) {
-              expect(after, `differs at ${now.toString()}`).toBe(before)
-            }
-          }
+describe('v2 → v3 migration properties', () => {
+  it('6. okayTime = wakeTime + wakeDuration, and every night and override lands on v2’s minutes across both DST changes', () => {
+    fc.assert(
+      fc.property(v2SettingsArb, fc.constantFrom(...WINDOW_STARTS), (v2, windowStart) => {
+        const v3 = parseSettingsJson(JSON.stringify({ version: 2, settings: v2 }))!
+        expect(v3.schedule.map(day => day.okayTime)).toEqual(v2.schedule.map(day => addWallMinutes(day.wakeTime, v2.wakeDuration)))
+        expect(v3.schedule.map(day => day.bedtime)).toEqual(v2.schedule.map(day => day.bedtime))
+        const manual = { ...v3, autoSchedule: false }
+
+        for (let offset = 0; offset < 10; offset++) {
+          const start = new Date(windowStart)
+          const evening = new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset)
+          const morning = new Date(evening.getFullYear(), evening.getMonth(), evening.getDate() + 1)
+          const bedtime = atWallTime(evening, v2.schedule[evening.getDay()].bedtime)
+          const wakeAt = atWallTime(morning, v2.schedule[morning.getDay()].wakeTime)
+          const okayAt = wakeAt + v2.wakeDuration * MIN
+          const label = evening.toDateString()
+
+          // nightOf, through the schedule.
+          const night = upcomingNight(new Date(atWallTime(evening, '14:00')), v3)
+          expect(night.windStart.getTime(), label).toBe(bedtime - v2.windDownMinutes * MIN)
+          expect(night.bedtime.getTime(), label).toBe(bedtime)
+          expect(night.wakeAt.getTime(), label).toBe(wakeAt)
+          expect(night.okayAt.getTime(), label).toBe(okayAt)
+
+          // wakeOn, through Start now and Off for now pressed after midnight.
+          const afterMidnight = morning.getTime() + MIN
+          const on: Override = { kind: 'on', start: afterMidnight }
+          expect(resolvePhase(new Date(wakeAt - 1), manual, on).state, label).toBe('night')
+          expect(resolvePhase(new Date(wakeAt), manual, on).state, label).toBe('wake')
+          expect(resolvePhase(new Date(okayAt), manual, on).state, label).toBe('awake')
+          const off: Override = { kind: 'off', start: afterMidnight, fromPhase: 'night' }
+          expect(overrideEnd(off, v3), label).toBe(wakeAt)
         }
-      ),
-      { numRuns: 15 }
+      }),
+      { numRuns: 300 }
     )
   })
 })
