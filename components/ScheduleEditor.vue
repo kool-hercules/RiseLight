@@ -204,17 +204,17 @@ const onWakeDuration = (event: Event) => {
 
     <!-- Custom: one row per day -->
     <div v-else class="mb-2">
-      <div class="grid grid-cols-[2.5rem_1fr_1fr] gap-x-3 gap-y-2 items-start">
+      <div class="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-2 items-start">
         <span />
         <span class="okay-label"><span class="okay-swatch" :style="{ backgroundColor: settings.colors.awake }" />Okay to get up</span>
         <span class="text-xs text-gray-400">Bedtime</span>
         <template v-for="row in DAYS" :key="row.day">
           <span class="text-sm text-gray-300 pt-2">{{ row.label }}</span>
           <div>
-            <input type="time" :min="OKAY_TIME_EARLIEST" :max="OKAY_TIME_LATEST" :value="settings.schedule[row.day].okayTime" @change="setDay(row.day, 'okayTime', $event)" class="time-input" :aria-label="`${row.label} okay to get up`">
+            <input type="time" :min="OKAY_TIME_EARLIEST" :max="OKAY_TIME_LATEST" :value="settings.schedule[row.day].okayTime" @change="setDay(row.day, 'okayTime', $event)" class="time-input time-input--compact" :aria-label="`${row.label} okay to get up`">
             <span class="block text-[11px] text-gray-500 mt-0.5 tabular-nums">Sunrise {{ sunriseAt(settings.schedule[row.day].okayTime) }}</span>
           </div>
-          <input type="time" min="15:00" max="23:59" :value="settings.schedule[row.day].bedtime" @change="setDay(row.day, 'bedtime', $event)" class="time-input" :aria-label="`${row.label} bedtime`">
+          <input type="time" min="15:00" max="23:59" :value="settings.schedule[row.day].bedtime" @change="setDay(row.day, 'bedtime', $event)" class="time-input time-input--compact" :aria-label="`${row.label} bedtime`">
         </template>
       </div>
     </div>
@@ -278,7 +278,11 @@ const onWakeDuration = (event: Event) => {
   @apply inline-block w-2.5 h-2.5 rounded-full shrink-0;
 }
 .time-input {
-  @apply w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500;
+  @apply w-full min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500;
   touch-action: manipulation;
+}
+/* The Custom grid fits two inputs beside the day name on a 390px phone. */
+.time-input--compact {
+  @apply px-2;
 }
 </style>
