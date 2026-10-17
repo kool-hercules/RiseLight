@@ -29,14 +29,14 @@ export const MODE_PRESENTATION: Record<LightMode, ModePresentation> = {
   },
   wake: {
     label: 'Almost time',
-    blurb: 'Morning is coming — keep resting.',
-    settingHelp: 'Eases in during the wake-up window as morning approaches.',
+    blurb: 'A sunrise eases in before okay-to-get-up. Keep resting.',
+    settingHelp: 'Eases in during the wake-up window, right before okay-to-get-up.',
     icon: 'sunrise'
   },
   awake: {
     label: 'Okay to get up!',
-    blurb: 'Time to rise and shine.',
-    settingHelp: 'Shows once it’s okay to get up.',
+    blurb: 'Turns green at the time you set. Rise and shine!',
+    settingHelp: 'Shows from the okay-to-get-up time you set.',
     icon: 'sun'
   }
 }
