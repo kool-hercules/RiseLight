@@ -180,12 +180,12 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
       const baseSegmentAtEnd = resolveBase(end, settings).segment
       const baseAtEnd = baseSegmentAtEnd?.state
       // A nap that runs into the evening routine — or whose 15-minute green
-      // tail would — never shows green: stay dark until it ends and hand
-      // straight back to the schedule.
+      // tail would, even from inside a long morning hold — never shows green:
+      // stay dark until it ends and hand straight back to the schedule.
       if (
         baseAtEnd === 'bedtime'
         || baseAtEnd === 'night'
-        || (baseAtEnd === undefined && nextWindStart(end, settings) < end + NAP_AWAKE_MS)
+        || nextWindStart(end, settings) < end + NAP_AWAKE_MS
       ) {
         return [{ state: 'night', start: override.start, end }]
       }

@@ -276,6 +276,21 @@ describe('overrides: nap', () => {
     expect(stateAt(at(16, 19, 10), settings, nap)).toBe('bedtime')
   })
 
+  it('a nap ending in a long green hold shows no green when its tail would reach story time', () => {
+    // Green 13:00 held 4h; story time starts 14:00. A nap ending 13:55 would
+    // show green over story time until 14:10.
+    const settings = makeSettings({
+      schedule: createDefaultSchedule('13:00', '15:00'),
+      wakeDuration: 60,
+      awakeHoldMinutes: 240,
+      windDownMinutes: 60
+    })
+    const nap: Override = { kind: 'nap', start: at(17, 13, 25).getTime(), minutes: 30 }
+    expect(stateAt(at(17, 13, 54), settings, nap)).toBe('night')
+    expect(overrideEnd(nap, settings)).toBe(at(17, 13, 55).getTime())
+    expect(stateAt(at(17, 14, 0), settings, nap)).toBe('bedtime')
+  })
+
   it('a nap ending inside a long wake window stays green into okay-to-get-up', () => {
     // Window 06:30–07:30. The nap ends 07:05; its green must not fall back to
     // the schedule's amber ramp at 07:20 and then turn green again at 07:30.
