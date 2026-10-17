@@ -148,10 +148,44 @@ describe('routine properties', () => {
     )
   })
 
-  it('2. without an override, a routine day is a subsequence of inactive → bedtime → night → wake → awake → inactive', () => {
+  it('2. without an override, any calendar day only steps forward along inactive → bedtime → night → wake → awake → inactive', () => {
+    // Taken as a sequence, a calendar day can see two nights' pieces (a late
+    // Friday green, then an early Saturday sunrise), so check each step
+    // instead. Story time may be off (inactive → night), and a long hold
+    // hands straight over to the next night (awake → bedtime / night).
+    const STEPS = new Set([
+      'inactive→bedtime', 'bedtime→night', 'night→wake', 'wake→awake', 'awake→inactive',
+      'awake→bedtime', 'inactive→night', 'awake→night'
+    ])
+    const midnightArb = fc.tuple(fc.constantFrom(...WINDOW_STARTS), fc.integer({ min: 0, max: 9 }))
+      .map(([start, offset]) => {
+        const day = new Date(start)
+        return new Date(day.getFullYear(), day.getMonth(), day.getDate() + offset).getTime()
+      })
+    fc.assert(
+      fc.property(settingsArb(), midnightArb, (settings, midnight) => {
+        const phases = walk(midnight, DAY_MINUTES + 60, settings, null)
+        for (let step = 1; step < phases.length; step++) {
+          const transition = `${phases[step - 1].state}→${phases[step].state}`
+          if (phases[step - 1].state === phases[step].state) {
+            continue
+          }
+          expect(STEPS.has(transition), transition).toBe(true)
+          if (transition.endsWith('→night') && !transition.startsWith('bedtime')) {
+            expect(settings.windDownMinutes, `${transition} with story time on`).toBe(0)
+          }
+        }
+      }),
+      { numRuns: 100 }
+    )
+  })
+
+  it('2b. without an override, a routine day shows every phase exactly once, in order', () => {
     // A routine day starts at 17:00, when the bounds guarantee last night's
     // hold is over, and runs until the next night (a later okay time) begins.
-    const ORDER: LightState[] = ['inactive', 'bedtime', 'night', 'wake', 'awake', 'inactive']
+    // Sunrise and green are never skipped; story time shows iff it is on and
+    // hasn't already passed; the day ends idle unless the hold runs into the
+    // next story time.
     const dayArb = fc.tuple(fc.constantFrom(...WINDOW_STARTS), fc.integer({ min: 0, max: 9 }))
       .map(([start, offset]) => {
         const day = new Date(start)
@@ -170,14 +204,25 @@ describe('routine properties', () => {
             sequence.push(phase.state)
           }
         }
-        let cursor = 0
-        for (const state of sequence) {
-          cursor = ORDER.indexOf(state, cursor)
-          expect(cursor, `out of order: ${sequence.join(' → ')}`).toBeGreaterThanOrEqual(0)
-          cursor++
+
+        if (!settings.autoSchedule) {
+          expect(sequence).toEqual(['inactive'])
+          return
         }
+        const night = upcomingNight(new Date(from), settings)
+        const idleAt = night.okayAt.getTime() + settings.awakeHoldMinutes * MIN
+        const next = upcomingNight(new Date(idleAt), settings)
+        const expected: LightState[] = [
+          ...(night.windStart.getTime() > from ? ['inactive' as const] : []),
+          ...(settings.windDownMinutes > 0 && night.bedtime.getTime() > from ? ['bedtime' as const] : []),
+          'night',
+          'wake',
+          'awake',
+          ...(idleAt < next.windStart.getTime() ? ['inactive' as const] : [])
+        ]
+        expect(sequence).toEqual(expected)
       }),
-      { numRuns: 60 }
+      { numRuns: 100 }
     )
   })
 
