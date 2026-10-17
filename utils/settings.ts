@@ -173,12 +173,20 @@ const boundedNumber = (value: unknown, fallback: number, minimum: number, maximu
 
 // Which stored shape a payload is in. v3 stores each day's okay-to-get-up
 // time; v2 stored each day's sunrise start (`wakeTime`); v1 and the unversioned
-// legacy shape stored one top-level sunrise start. An unversioned record with
-// a `schedule` array is an in-memory Settings object (serializeSettings
-// re-parses its input), so it is read as v3.
+// legacy shape stored one top-level sunrise start. An unversioned record with a
+// `schedule` array (an import of a bare Settings object) is read by its rows:
+// v2 if they carry only `wakeTime`, as v2 itself read them, otherwise v3.
 type PayloadFormat = 'v3' | 'v2' | 'legacy'
 
 type Payload = { source: UnknownRecord; format: PayloadFormat }
+
+const unversionedFormat = (stored: UnknownRecord): PayloadFormat => {
+  if (!Array.isArray(stored.schedule)) {
+    return 'legacy'
+  }
+  const rows = stored.schedule.filter(isRecord)
+  return rows.some(row => 'wakeTime' in row) && !rows.some(row => 'okayTime' in row) ? 'v2' : 'v3'
+}
 
 const settingsPayload = (stored: unknown): Payload | null => {
   if (!isRecord(stored)) {
@@ -186,7 +194,7 @@ const settingsPayload = (stored: unknown): Payload | null => {
   }
 
   if (!('version' in stored)) {
-    return { source: stored, format: Array.isArray(stored.schedule) ? 'v3' : 'legacy' }
+    return { source: stored, format: unversionedFormat(stored) }
   }
 
   if (!isRecord(stored.settings)) {
@@ -324,7 +332,7 @@ export const parseSettingsJson = (settingsJson: string): Settings | null => {
 export const serializeSettings = (settings: Settings, space?: number): string => {
   const stored: StoredSettingsV3 = {
     version: SETTINGS_SCHEMA_VERSION,
-    settings: parseSettings(settings)
+    settings: parseSettings({ version: SETTINGS_SCHEMA_VERSION, settings })
   }
 
   return JSON.stringify(stored, null, space)

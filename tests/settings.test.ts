@@ -271,6 +271,18 @@ describe('settings schema migration', () => {
     expect(parsed.schedule[2]).toEqual({ okayTime: '06:40', bedtime: '20:00' })
   })
 
+  it('reads an unversioned week by its rows: wakeTime rows as v2, okayTime rows as v3', () => {
+    // v2 parsed an unversioned record with a schedule as a v2 week, so an
+    // imported copy of a v2 export's inner `settings` must keep its greens.
+    const v2Rows = Array.from({ length: 7 }, () => ({ wakeTime: '06:00', bedtime: '19:00' }))
+    const fromV2 = parseSettingsJson(JSON.stringify({ ...createDefaultSettings(), schedule: v2Rows, wakeDuration: 20 }))!
+    expect(fromV2.schedule).toEqual(createDefaultSchedule('06:20', '19:00'))
+
+    const v3Rows = createDefaultSchedule('06:20', '19:00')
+    const fromV3 = parseSettingsJson(JSON.stringify({ ...createDefaultSettings(), schedule: v3Rows, wakeDuration: 20 }))!
+    expect(fromV3.schedule).toEqual(v3Rows)
+  })
+
   it('saves a migrated v2 blob back as v3', () => {
     const storage = new MemoryStorage({
       [SETTINGS_STORAGE_KEY]: JSON.stringify({
