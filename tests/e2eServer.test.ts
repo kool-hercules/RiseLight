@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -89,5 +89,22 @@ describe('e2e static server', () => {
   it('answers a malformed escape with 400 and keeps serving', async () => {
     expect((await get('/%E0%A4%A')).status).toBe(400)
     expect((await get('/')).status).toBe(200)
+  })
+})
+
+describe('e2e static server without a build', () => {
+  it('exits with an error instead of serving 404s to every spec', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'riselight-serve-empty-'))
+    try {
+      const run = spawnSync(process.execPath, ['e2e/serve.mjs', empty], {
+        env: { ...process.env, E2E_PORT: '0' },
+        encoding: 'utf8',
+        timeout: 5_000
+      })
+      expect(run.status).toBe(1)
+      expect(run.stderr).toContain('npm run generate')
+    } finally {
+      rmSync(empty, { recursive: true, force: true })
+    }
   })
 })

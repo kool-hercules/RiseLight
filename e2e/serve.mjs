@@ -2,11 +2,18 @@
 // as-is, and a real 404 for anything else (no SPA fallback), so the offline
 // specs can see what the service worker does with an error navigation.
 import { createServer } from 'node:http'
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { extname, resolve, sep } from 'node:path'
+import { extname, join, resolve, sep } from 'node:path'
 
 const root = resolve(process.argv[2] ?? '.output/public')
 const port = Number(process.env.E2E_PORT ?? 4310)
+
+// Without a build every spec would fail on a 404 page; say why instead.
+if (!existsSync(join(root, 'index.html'))) {
+  console.error(`e2e: no build at ${root}. Run \`npm run generate\` first (or \`npm run e2e\`).`)
+  process.exit(1)
+}
 
 const types = {
   '.html': 'text/html; charset=utf-8',
