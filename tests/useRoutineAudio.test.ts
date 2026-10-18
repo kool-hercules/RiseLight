@@ -118,6 +118,43 @@ describe('useRoutineAudio', () => {
       expect(ambient.selectSound).toHaveBeenCalledTimes(2)
     })
 
+    it.each(['pointerup', 'touchend', 'keydown'])('a %s alone unlocks (touch taps carry activation only on release)', async type => {
+      const { api, ambient } = await blocked()
+      document.dispatchEvent(new Event(type))
+      await flush()
+      expect(ambient.selectSound).toHaveBeenCalledTimes(2)
+      expect(api.needsAudioUnlock.value).toBe(false)
+    })
+
+    it('a slow failed attempt from pointerdown does not bring the badge back after pointerup unlocked', async () => {
+      const { api, ambient } = await blocked()
+      // pointerdown on touch has no activation, so its resume() hangs until the
+      // timeout and fails; the pointerup a moment later succeeds at once.
+      let failDown!: (ok: boolean) => void
+      ambient.prime
+        .mockImplementationOnce(() => new Promise<boolean>(resolve => { failDown = resolve }))
+        .mockImplementationOnce(async () => true)
+      document.dispatchEvent(new Event('pointerdown'))
+      document.dispatchEvent(new Event('pointerup'))
+      await flush()
+      expect(api.needsAudioUnlock.value).toBe(false)
+      expect(ambient.selectSound).toHaveBeenCalledTimes(2)
+
+      failDown(false)
+      await flush()
+      expect(api.needsAudioUnlock.value).toBe(false)
+    })
+
+    it('unlocks on a key whose propagation a component stops (the clock stops Enter/Space)', async () => {
+      const { api } = await blocked()
+      const clock = document.body.appendChild(document.createElement('button'))
+      clock.addEventListener('keydown', event => event.stopPropagation())
+      clock.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      clock.remove()
+      await flush()
+      expect(api.needsAudioUnlock.value).toBe(false)
+    })
+
     it('ignores gestures while nothing is blocked', async () => {
       const { ambient } = mountRoutineAudio('inactive')
       await tap()

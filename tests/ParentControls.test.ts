@@ -98,6 +98,15 @@ describe('ParentControls idle hide', () => {
   })
 })
 
+describe('ParentControls focus', () => {
+  // The hold that opened the layer may be a held Enter/Space; its repeats must
+  // land on the region, not "click" Off for now.
+  it('focuses the region, not a button, when it opens', () => {
+    const wrapper = mountControls()
+    expect(document.activeElement).toBe(wrapper.find('[aria-label="Parent controls"]').element)
+  })
+})
+
 describe('ParentControls nap sheet', () => {
   it('opens from Nap and starts the chosen length', async () => {
     const wrapper = mountControls()

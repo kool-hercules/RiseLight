@@ -214,6 +214,19 @@ describe('useParentLayer panel auto-close', () => {
     expect(isSettingsOpen.value).toBe(false)
   })
 
+  it('counts a key whose propagation a component stops as activity (the clock stops Enter/Space)', async () => {
+    const { isSettingsOpen } = mountLayer({ childLock: true })
+    isSettingsOpen.value = true
+    await nextTick()
+    vi.advanceTimersByTime(45_000)
+    const target = document.body.appendChild(document.createElement('button'))
+    target.addEventListener('keydown', event => event.stopPropagation())
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    target.remove()
+    vi.advanceTimersByTime(45_000)
+    expect(isSettingsOpen.value).toBe(true)
+  })
+
   it('stops the timer and the keyboard once unmounted', async () => {
     const { wrapper, isSettingsOpen, stopPreview } = mountLayer({ childLock: true })
     isSettingsOpen.value = true
