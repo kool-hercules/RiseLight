@@ -22,8 +22,9 @@ test('loads once, then launches and renders offline', async ({ page, context }) 
         missing.push(url.pathname)
       }
     }
-    return { loaded: loaded.length, missing }
-  }, CACHE), { timeout: 15_000 }).toMatchObject({ missing: [] })
+    // No build files at all would make "none missing" true by default.
+    return loaded.length === 0 ? ['(no /_nuxt files loaded)'] : missing
+  }, CACHE), { timeout: 15_000 }).toEqual([])
 
   await context.setOffline(true)
   await page.reload()

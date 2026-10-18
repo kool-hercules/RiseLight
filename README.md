@@ -103,8 +103,8 @@ Notes: the audio spec runs against Chromium's real autoplay policy. Playwright
 grants the page a user activation whenever it runs script there (evaluate,
 locator and `expect` queries, trace DOM snapshots), so that spec reads the
 badge through console messages and taps with raw touchscreen input until the
-tap has happened. Press-and-hold specs run in real
-time, so the suite takes about 10 seconds. A change to anything under
+tap has happened. Press-and-hold specs step the page's timers with
+`page.clock` rather than waiting in real time. A change to anything under
 `pages/`, `components/` or `public/sw.js` needs `npm run generate` before
 re-running a single spec.
 
