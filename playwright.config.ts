@@ -9,7 +9,11 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  // CI retries once so a failure keeps a trace of the second attempt, but a
+  // test that only passes on retry still fails the run: the specs are meant
+  // to be deterministic, and a retry must not hide that one isn't.
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://127.0.0.1:${port}`,
