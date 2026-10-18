@@ -179,22 +179,27 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
       const end = override.start + override.minutes * MINUTE
       const baseSegmentAtEnd = resolveBase(end, settings).segment
       const baseAtEnd = baseSegmentAtEnd?.state
-      // A nap that runs into the evening routine — or whose 15-minute green
-      // tail would, even from inside a long morning hold — never shows green:
+      // A nap that runs into the evening routine — or that ends in daytime
+      // idle with story time less than 15 minutes away — never shows green:
       // stay dark until it ends and hand straight back to the schedule.
       if (
         baseAtEnd === 'bedtime'
         || baseAtEnd === 'night'
-        || nextWindStart(end, settings) < end + NAP_AWAKE_MS
+        || (baseAtEnd === undefined && nextWindStart(end, settings) < end + NAP_AWAKE_MS)
       ) {
         return [{ state: 'night', start: override.start, end }]
       }
       const rampStart = Math.max(override.start, end - Math.min(settings.wakeDuration, 5) * MINUTE)
       // Ending inside the morning's wake window: stay green until the schedule
       // turns green too, so the light never goes back from green to amber.
-      const greenEnd = baseAtEnd === 'wake' && baseSegmentAtEnd
-        ? Math.max(end + NAP_AWAKE_MS, baseSegmentAtEnd.end)
-        : end + NAP_AWAKE_MS
+      // Ending inside a long green hold: green hands over to tonight's story
+      // time, as the schedule's own green and Start now's do.
+      const greenEnd = Math.min(
+        baseAtEnd === 'wake' && baseSegmentAtEnd
+          ? Math.max(end + NAP_AWAKE_MS, baseSegmentAtEnd.end)
+          : end + NAP_AWAKE_MS,
+        nextWindStart(end, settings)
+      )
       return [
         { state: 'night', start: override.start, end: rampStart },
         { state: 'wake', start: rampStart, end },
@@ -331,8 +336,8 @@ export const upcomingOkayToWake = (
     if (okay) {
       candidates.add(okay.start)
     }
-    // Handing back to the schedule can itself turn the light green: a nap that
-    // ends inside a long hold just before story time shows no green of its own.
+    // If handing back to the schedule ever turns the light green, that is a new
+    // green too. (No override does that today; the filter below drops it if not.)
     candidates.add(endOfSegments(override, segments))
   }
 

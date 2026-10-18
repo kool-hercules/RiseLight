@@ -276,10 +276,11 @@ describe('overrides: nap', () => {
     expect(stateAt(at(16, 19, 10), settings, nap)).toBe('bedtime')
   })
 
-  it('a nap ending in a long green hold shows no green of its own when its tail would reach story time', () => {
-    // Green 13:00 held 4h; story time starts 14:00. A nap ending 13:55 would
-    // show green over story time until 14:10. It hands back to the schedule
-    // instead, which is still green 13:55–14:00.
+  it('a nap ending in a long green hold runs its own sunrise and green, then hands over to story time', () => {
+    // Green 13:00 held 4h; story time starts 14:00. The nap ends 13:55: its
+    // short sunrise and green play as usual, and the green stops at story time
+    // (as the schedule's own green and Start now's do) instead of running to
+    // 14:10. It never goes dark → green → story time.
     const settings = makeSettings({
       schedule: createDefaultSchedule('13:00', '15:00'),
       wakeDuration: 60,
@@ -287,8 +288,11 @@ describe('overrides: nap', () => {
       windDownMinutes: 60
     })
     const nap: Override = { kind: 'nap', start: at(17, 13, 25).getTime(), minutes: 30 }
-    expect(stateAt(at(17, 13, 54), settings, nap)).toBe('night')
-    expect(overrideEnd(nap, settings)).toBe(at(17, 13, 55).getTime())
+    expect(stateAt(at(17, 13, 49), settings, nap)).toBe('night')
+    expect(stateAt(at(17, 13, 50), settings, nap)).toBe('wake')
+    expect(stateAt(at(17, 13, 55), settings, nap)).toBe('awake')
+    expect(resolvePhase(at(17, 13, 59), settings, nap).override).toEqual(nap)
+    expect(overrideEnd(nap, settings)).toBe(at(17, 14).getTime())
     expect(stateAt(at(17, 14, 0), settings, nap)).toBe('bedtime')
   })
 
@@ -437,10 +441,9 @@ describe('upcomingOkayToWake', () => {
     expect(times).toEqual([at(17, 7, 5).getTime(), at(18, 7, 30).getTime()])
   })
 
-  it('lists a nap’s end when it hands back to the schedule’s green', () => {
+  it('lists a nap’s green when it ends in a long hold just before story time', () => {
     // Found by the completeness property. Green 13:00 held 4h; story time
-    // starts 14:00. The nap ending 13:55 shows no green of its own, but the
-    // schedule is still green until 14:00, so the light turns green at 13:55.
+    // starts 14:00. The nap turns green at 13:55, so that needs an alarm.
     const settings = makeSettings({
       schedule: createDefaultSchedule('13:00', '15:00'),
       wakeDuration: 60,
@@ -448,7 +451,7 @@ describe('upcomingOkayToWake', () => {
       windDownMinutes: 60
     })
     const nap: Override = { kind: 'nap', start: at(17, 13, 25).getTime(), minutes: 30 }
-    expect(stateAt(at(17, 13, 54), settings, nap)).toBe('night')
+    expect(stateAt(at(17, 13, 54), settings, nap)).toBe('wake')
     expect(stateAt(at(17, 13, 55), settings, nap)).toBe('awake')
     const times = upcomingOkayToWake(at(17, 13, 30), settings, nap, 2).map(date => date.getTime())
     expect(times).toEqual([at(17, 13, 55).getTime(), at(18, 13).getTime()])
