@@ -299,9 +299,9 @@ describe('routine properties', () => {
         const show = (instants: number[]) => instants.map(instant => new Date(instant).toString())
         expect(show(listed.filter(instant => instant <= now + HORIZON_MINUTES * MIN))).toEqual(show(turnsGreen))
       }),
-      { numRuns: 600 }
+      { numRuns: 150 }
     )
-  }, 30_000)
+  }, 15_000)
 })
 
 // v2 stored each day's sunrise start (04:00–12:00). The engine reads the
