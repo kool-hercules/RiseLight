@@ -181,6 +181,9 @@ describe('useRoutineAudio', () => {
 
     it('does not touch a sound the parent started by hand while the light is idle after morning', async () => {
       const { currentState, ambient } = mountRoutineAudio('awake')
+      // The parent's speaker tap: without it nothing is playing and the stop
+      // would be skipped whatever the rule says.
+      ambient.isPlaying.value = true
       currentState.value = 'inactive'
       await flush()
       expect(ambient.stopPlayback).not.toHaveBeenCalled()
@@ -222,9 +225,16 @@ describe('useRoutineAudio', () => {
   })
 
   it('stops listening for gestures once unmounted', async () => {
-    const { wrapper, ambient } = mountRoutineAudio('inactive')
+    // Blocked first: with no badge up a gesture is ignored anyway, which would
+    // hide a listener left behind.
+    const players = createFakePlayers()
+    players.ambient.selectSound.mockResolvedValue(false)
+    const { wrapper, currentState, api } = mountRoutineAudio('inactive', {}, players)
+    currentState.value = 'bedtime'
+    await flush()
+    expect(api.needsAudioUnlock.value).toBe(true)
     wrapper.unmount()
     await tap()
-    expect(ambient.prime).not.toHaveBeenCalled()
+    expect(players.ambient.prime).not.toHaveBeenCalled()
   })
 })

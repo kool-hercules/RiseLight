@@ -88,10 +88,13 @@ describe('ParentControls idle hide', () => {
   it('stops listening and timing once unmounted', () => {
     const wrapper = mountControls()
     wrapper.unmount()
-    vi.advanceTimersByTime(60_000)
+    // Vue drops emits from an unmounted component, so a leaked listener or
+    // timer can only be seen as a timer: a live listener would schedule one.
+    expect(vi.getTimerCount()).toBe(0)
     window.dispatchEvent(new Event('pointerdown'))
-    vi.advanceTimersByTime(60_000)
-    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(0)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }))
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
 

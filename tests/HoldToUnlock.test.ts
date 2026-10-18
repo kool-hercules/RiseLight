@@ -60,10 +60,18 @@ describe('HoldToUnlock (child lock on)', () => {
     expect(wrapper.emitted('unlock')).toHaveLength(1)
   })
 
-  it('cancels on pointercancel and on blur', async () => {
+  // One hold per test: a second pointerdown restarts the hold itself, which
+  // would hide a cancel that did nothing.
+  it('cancels on pointercancel', async () => {
     const wrapper = mountHold()
     await down(wrapper)
     await wrapper.trigger('pointercancel')
+    vi.advanceTimersByTime(5_000)
+    expect(wrapper.emitted('unlock')).toBeUndefined()
+  })
+
+  it('cancels on blur', async () => {
+    const wrapper = mountHold()
     await down(wrapper)
     await wrapper.trigger('blur')
     vi.advanceTimersByTime(5_000)
@@ -115,8 +123,9 @@ describe('HoldToUnlock (child lock on)', () => {
     const wrapper = mountHold()
     await down(wrapper)
     wrapper.unmount()
-    vi.advanceTimersByTime(5_000)
-    expect(wrapper.emitted('unlock')).toBeUndefined()
+    // Vue drops emits from an unmounted component, so a leaked timer can only
+    // be seen as a timer.
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
 

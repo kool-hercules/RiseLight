@@ -130,10 +130,13 @@ describe('useParentLayer visibility', () => {
     expect(layer.parentVisible.value).toBe(true)
   })
 
-  it('"Got it" on the pinned layer closes it for good', () => {
+  it('"Got it" on the pinned layer closes it for good', async () => {
     const { layer, dismiss } = mountLayer({ pinned: true })
     layer.closeParent()
     expect(dismiss).toHaveBeenCalled()
+    expect(layer.parentVisible.value).toBe(false)
+    // A deferred hand-off watcher would reopen it here.
+    await nextTick()
     expect(layer.parentVisible.value).toBe(false)
   })
 
@@ -211,12 +214,15 @@ describe('useParentLayer panel auto-close', () => {
     expect(isSettingsOpen.value).toBe(false)
   })
 
-  it('stops the timer once unmounted', async () => {
-    const { wrapper, isSettingsOpen } = mountLayer({ childLock: true })
+  it('stops the timer and the keyboard once unmounted', async () => {
+    const { wrapper, isSettingsOpen, stopPreview } = mountLayer({ childLock: true })
     isSettingsOpen.value = true
     await nextTick()
     wrapper.unmount()
     vi.advanceTimersByTime(120_000)
     expect(isSettingsOpen.value).toBe(true)
+    press('Escape')
+    expect(isSettingsOpen.value).toBe(true)
+    expect(stopPreview).not.toHaveBeenCalled()
   })
 })
