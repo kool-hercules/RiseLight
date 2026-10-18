@@ -1,9 +1,16 @@
+import { createHash } from 'node:crypto'
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, devices } from '@playwright/test'
 
 // Specs run against the static `nuxt generate` build (run `npm run generate`
 // first, or use `npm run e2e`), served on a port that is not the dev server's
-// 8080. Override with E2E_PORT if 4310 is taken.
-const port = Number(process.env.E2E_PORT ?? 4310)
+// 8080. Each checkout gets its own port in 4310-4909, derived from its path,
+// so parallel worktrees don't fight over one; E2E_PORT overrides. It goes back
+// into the environment so the workers and the server agree on it.
+const checkout = dirname(fileURLToPath(import.meta.url))
+const port = Number(process.env.E2E_PORT ?? 4310 + createHash('sha1').update(checkout).digest().readUInt16BE(0) % 600)
+process.env.E2E_PORT = String(port)
 
 export default defineConfig({
   testDir: './e2e',

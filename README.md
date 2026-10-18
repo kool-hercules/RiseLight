@@ -91,7 +91,8 @@ Three layers, all run in CI (`.github/workflows/ci.yml`):
 - **Browser tests** (`e2e/`, Playwright, Chromium only): the child lock, the
   first-run hand-off, offline launch from the service worker, and the mobile
   audio-unlock tap. They run against the static `nuxt generate` build, served
-  on port 4310 (override with `E2E_PORT`).
+  on a port in 4310-4909 picked from the checkout's path, so parallel
+  worktrees don't collide (override with `E2E_PORT`).
 
 ```bash
 npm test            # first two layers
