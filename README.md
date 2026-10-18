@@ -60,7 +60,8 @@ speaker badge appears; the next tap anywhere turns sound back on.
 npm install       # install dependencies
 npm run dev       # start the dev server
 npm run generate  # static build → .output/public (what Netlify deploys)
-npm test          # run the unit tests (vitest)
+npm test          # run the unit and component tests (vitest)
+npm run e2e       # build, then run the browser tests (Playwright)
 npm run typecheck # type-check
 ```
 
@@ -74,6 +75,41 @@ QA tips:
 - Fresh `localStorage` shows the first-run parent controls pinned open; left
   untouched they hand back to the kid screen after two minutes.
 - `npm test` pins `TZ=America/New_York` so the DST cases really cross DST.
+
+## Testing
+
+Three layers, all run in CI (`.github/workflows/ci.yml`):
+
+- **Engine tests** (`tests/*.test.ts`, node): the routine, settings, audio
+  engines, service worker and the e2e static server, with `TZ` pinned to
+  `America/New_York`.
+- **Component and composable tests** (`@vue/test-utils` + happy-dom, opted into
+  per file with `// @vitest-environment happy-dom`, fake timers): the child-lock
+  hold, the parent controls, and the page wiring extracted into
+  `composables/useRoutineAudio.ts` and `composables/useParentLayer.ts`, which
+  take their players as arguments so tests can pass fakes.
+- **Browser tests** (`e2e/`, Playwright, Chromium only): the child lock, the
+  first-run hand-off, offline launch from the service worker, and the mobile
+  audio-unlock tap. They run against the static `nuxt generate` build, served
+  on a port in 4310-4909 picked from the checkout's path, so parallel
+  worktrees don't collide (override with `E2E_PORT`).
+
+```bash
+npm test            # first two layers
+npx playwright install chromium   # once
+npm run e2e         # generate + browser tests
+npx playwright test e2e/offline.spec.ts   # one spec, against the last build
+```
+
+Notes: the audio spec runs against Chromium's real autoplay policy. Playwright
+grants the page a user activation whenever it runs script there (evaluate,
+locator and `expect` queries, trace DOM snapshots), so that spec reads the
+badge through console messages and taps with raw touchscreen input until the
+tap has happened. Press-and-hold specs step the page's timers with
+`page.clock` rather than waiting in real time. In CI a spec that only passes
+on retry fails the run. A change to anything under `pages/`, `components/`,
+`composables/`, `utils/` or `public/sw.js` needs `npm run generate` before
+re-running a single spec; with no build at all the server refuses to start.
 
 ## Technical details
 
@@ -107,11 +143,13 @@ later; it needs no rewrite.
 ├── components/        NightLight (kid layer), KidScene, ParentControls, HoldToUnlock,
 │                      SettingsPanel, ScheduleEditor, HelpPopover, icons
 ├── composables/       useNightLight, useSettings, useAmbient, useChime, useWakeLock,
-│                      useKeepAwake, useWakeAlarm, useOnboarding
-├── pages/index.vue    wires composables to components and side effects
+│                      useKeepAwake, useWakeAlarm, useOnboarding,
+│                      useRoutineAudio, useParentLayer
+├── pages/index.vue    template and wiring only
 ├── utils/             pure logic: routine, override, ramp, settings, alarm, ambient, chime, …
 ├── public/            manifest, service worker, icons, sounds/ (optional recordings)
-└── tests/             vitest suites
+├── tests/             vitest suites (engine, component, composable)
+└── e2e/               Playwright specs and a static server for the generated build
 ```
 
 ## License

@@ -41,6 +41,9 @@ export const MODE_PRESENTATION: Record<LightMode, ModePresentation> = {
   }
 }
 
+// Story time and lights-out: the phases where sound plays and naps make no sense.
+export const isSleepPhase = (state: LightState): boolean => state === 'bedtime' || state === 'night'
+
 export const stateHeadline = (state: LightState): string =>
   state === 'inactive' ? 'Light is off' : MODE_PRESENTATION[state].label
 
