@@ -81,16 +81,17 @@ QA tips:
 Three layers, all run in CI (`.github/workflows/ci.yml`):
 
 - **Engine tests** (`tests/*.test.ts`, node): the routine, settings, audio
-  engines and service worker, with `TZ` pinned to `America/New_York`.
+  engines, service worker and the e2e static server, with `TZ` pinned to
+  `America/New_York`.
 - **Component and composable tests** (`@vue/test-utils` + happy-dom, opted into
   per file with `// @vitest-environment happy-dom`, fake timers): the child-lock
   hold, the parent controls, and the page wiring extracted into
   `composables/useRoutineAudio.ts` and `composables/useParentLayer.ts`, which
   take their players as arguments so tests can pass fakes.
-- **Browser tests** (`e2e/`, Playwright, Chromium only): the child lock,
-  offline launch from the service worker, and the mobile audio-unlock tap. They
-  run against the static `nuxt generate` build, served on port 4310 (override
-  with `E2E_PORT`).
+- **Browser tests** (`e2e/`, Playwright, Chromium only): the child lock, the
+  first-run hand-off, offline launch from the service worker, and the mobile
+  audio-unlock tap. They run against the static `nuxt generate` build, served
+  on port 4310 (override with `E2E_PORT`).
 
 ```bash
 npm test            # first two layers
@@ -104,9 +105,10 @@ grants the page a user activation whenever it runs script there (evaluate,
 locator and `expect` queries, trace DOM snapshots), so that spec reads the
 badge through console messages and taps with raw touchscreen input until the
 tap has happened. Press-and-hold specs step the page's timers with
-`page.clock` rather than waiting in real time. A change to anything under
-`pages/`, `components/` or `public/sw.js` needs `npm run generate` before
-re-running a single spec.
+`page.clock` rather than waiting in real time. In CI a spec that only passes
+on retry fails the run. A change to anything under `pages/`, `components/`,
+`composables/`, `utils/` or `public/sw.js` needs `npm run generate` before
+re-running a single spec; with no build at all the server refuses to start.
 
 ## Technical details
 
