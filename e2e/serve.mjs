@@ -3,7 +3,7 @@
 // specs can see what the service worker does with an error navigation.
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
-import { extname, join, normalize, resolve } from 'node:path'
+import { extname, resolve, sep } from 'node:path'
 
 const root = resolve(process.argv[2] ?? '.output/public')
 const port = Number(process.env.E2E_PORT ?? 4310)
@@ -19,11 +19,20 @@ const types = {
 }
 
 createServer(async (request, response) => {
-  const { pathname } = new URL(request.url ?? '/', 'http://localhost')
-  const relative = normalize(decodeURIComponent(pathname)).replace(/^(\.\.[/\\])+/, '')
-  const file = join(root, relative.endsWith('/') ? `${relative}index.html` : relative)
+  let pathname
+  try {
+    pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname)
+  } catch {
+    // A malformed escape (`/%E0%A4%A`) would otherwise throw out of this
+    // handler and take the whole server down mid-run.
+    response.writeHead(400).end()
+    return
+  }
+  const file = resolve(root, `.${pathname.endsWith('/') ? `${pathname}index.html` : pathname}`)
 
-  if (!file.startsWith(root)) {
+  // Inside the root only: compare with a trailing separator so a sibling such
+  // as `public-secret` doesn't pass as a prefix of `public`.
+  if (!file.startsWith(root + sep)) {
     response.writeHead(403).end()
     return
   }
