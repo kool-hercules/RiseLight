@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import ParentControls from '../components/ParentControls.vue'
 
 const baseProps = {
@@ -26,13 +26,16 @@ const mountControls = (props: Partial<typeof baseProps> = {}) =>
 const buttonByText = (wrapper: ReturnType<typeof mountControls>, text: string) =>
   wrapper.findAll('button').find(button => button.text() === text)
 
+// Unmount every wrapper after each test so its document/window listeners and
+// timers never react to the next test's events.
+enableAutoUnmount(afterEach)
+
 beforeEach(() => {
   vi.useFakeTimers()
 })
 
 afterEach(() => {
   vi.useRealTimers()
-  document.body.innerHTML = ''
 })
 
 describe('ParentControls idle hide', () => {

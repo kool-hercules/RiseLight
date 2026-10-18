@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
+import { enableAutoUnmount } from '@vue/test-utils'
 import { createFakePlayers, mountRoutineAudio } from './helpers/audioHarness'
 
 const flush = async () => {
@@ -12,6 +13,10 @@ const tap = async () => {
   document.dispatchEvent(new Event('pointerup'))
   await flush()
 }
+
+// Unmount every wrapper after each test so its document/window listeners and
+// timers never react to the next test's events.
+enableAutoUnmount(afterEach)
 
 beforeEach(() => {
   vi.useFakeTimers()

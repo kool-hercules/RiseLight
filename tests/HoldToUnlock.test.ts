@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import HoldToUnlock from '../components/HoldToUnlock.vue'
 
 const mountHold = (locked = true) => mount(HoldToUnlock, {
@@ -12,13 +12,16 @@ const mountHold = (locked = true) => mount(HoldToUnlock, {
 const down = (wrapper: ReturnType<typeof mountHold>, x = 100, y = 100) =>
   wrapper.trigger('pointerdown', { clientX: x, clientY: y, pointerId: 1 })
 
+// Unmount every wrapper after each test so its document/window listeners and
+// timers never react to the next test's events.
+enableAutoUnmount(afterEach)
+
 beforeEach(() => {
   vi.useFakeTimers()
 })
 
 afterEach(() => {
   vi.useRealTimers()
-  document.body.innerHTML = ''
 })
 
 describe('HoldToUnlock (child lock on)', () => {

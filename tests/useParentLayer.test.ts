@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, nextTick, ref } from 'vue'
-import { mount } from '@vue/test-utils'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { useParentLayer } from '../composables/useParentLayer'
 
 const mountLayer = ({ pinned = false, childLock = true } = {}) => {
@@ -36,6 +36,10 @@ const press = (key: string, init: KeyboardEventInit = {}) => {
   document.dispatchEvent(event)
   return event
 }
+
+// Unmount every wrapper after each test so its document/window listeners and
+// timers never react to the next test's events.
+enableAutoUnmount(afterEach)
 
 beforeEach(() => {
   vi.useFakeTimers()
