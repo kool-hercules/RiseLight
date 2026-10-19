@@ -357,6 +357,9 @@ describe('settings schema migration', () => {
     custom.ambientAutoStart = false
     custom.childLock = false
     custom.sceneEnabled = false
+    custom.friend = 'puff'
+    custom.starShape = 'initial'
+    custom.childInitial = 'M'
     custom.colors.bedtime = '#aa5500'
     custom.brightness.bedtime = 10
 
@@ -379,6 +382,45 @@ describe('settings schema migration', () => {
     expect(parsed.awakeHoldMinutes).toBe(60)
     expect(parsed.lastNapMinutes).toBe(60)
     expect(parsed.childLock).toBe(true)
+  })
+})
+
+describe('kid screen fields', () => {
+  it('defaults to Bo with friend-shaped stars and no initial, including for older saves', () => {
+    const fresh = createDefaultSettings()
+    expect([fresh.friend, fresh.starShape, fresh.childInitial]).toEqual(['bo', 'friend', ''])
+
+    const legacy = parseSettingsJson(JSON.stringify({ version: 2, settings: { childLock: false } }))
+    expect([legacy?.friend, legacy?.starShape, legacy?.childInitial]).toEqual(['bo', 'friend', ''])
+  })
+
+  it('replaces unknown friends, shapes and malformed initials individually', () => {
+    const parsed = parseSettingsJson(JSON.stringify({
+      version: 2,
+      settings: { friend: 'dragon', starShape: 'rocket', childInitial: 'AB' }
+    }))
+    expect([parsed?.friend, parsed?.starShape, parsed?.childInitial]).toEqual(['bo', 'friend', ''])
+
+    const upper = parseSettingsJson(JSON.stringify({ version: 2, settings: { childInitial: 'm', friend: 'pip' } }))
+    expect([upper?.friend, upper?.childInitial]).toEqual(['pip', 'M'])
+  })
+
+  it('updates through the store, upper-casing the initial and ignoring bad input', () => {
+    const store = useSettings()
+    store.resetSettings()
+    store.updateFriend('puff')
+    store.updateStarShape('heart')
+    store.updateChildInitial('j')
+    expect([store.settings.value.friend, store.settings.value.starShape, store.settings.value.childInitial]).toEqual(['puff', 'heart', 'J'])
+
+    store.updateFriend('dragon' as never)
+    store.updateStarShape('rocket' as never)
+    store.updateChildInitial('7')
+    store.updateChildInitial('JK')
+    expect([store.settings.value.friend, store.settings.value.starShape, store.settings.value.childInitial]).toEqual(['puff', 'heart', 'J'])
+
+    store.updateChildInitial('')
+    expect(store.settings.value.childInitial).toBe('')
   })
 })
 

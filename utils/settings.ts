@@ -1,5 +1,5 @@
-import type { AmbientSoundId, DaySchedule, LightMode, Settings } from '../types'
-import { AMBIENT_SOUND_IDS } from '../types'
+import type { AmbientSoundId, DaySchedule, FriendId, LightMode, Settings, StarShape } from '../types'
+import { AMBIENT_SOUND_IDS, FRIEND_IDS, STAR_SHAPES } from '../types'
 
 export const SETTINGS_STORAGE_KEY = 'nightlight-settings'
 export const SETTINGS_SCHEMA_VERSION = 3 as const
@@ -58,6 +58,9 @@ export const createDefaultSettings = (): Settings => ({
   ambientAutoStart: true,
   childLock: true,
   sceneEnabled: true,
+  friend: 'bo',
+  starShape: 'friend',
+  childInitial: '',
   chimeEnabled: false,
   ambientSound: null,
   ambientVolume: 50,
@@ -151,6 +154,19 @@ export const isValidBrightness = (brightness: unknown): brightness is number => 
 export const isValidAmbientSound = (value: unknown): value is AmbientSoundId | null => {
   return value === null || (typeof value === 'string' && AMBIENT_SOUND_IDS.includes(value as AmbientSoundId))
 }
+
+export const isValidFriend = (value: unknown): value is FriendId =>
+  typeof value === 'string' && FRIEND_IDS.includes(value as FriendId)
+
+export const isValidStarShape = (value: unknown): value is StarShape =>
+  typeof value === 'string' && STAR_SHAPES.includes(value as StarShape)
+
+// One letter, A-Z, or '' for "not set". Lowercase input is accepted and
+// upper-cased by normalizeInitial; anything else is rejected.
+export const isValidInitial = (value: unknown): value is string =>
+  typeof value === 'string' && /^[A-Za-z]?$/.test(value)
+
+export const normalizeInitial = (value: string): string => value.toUpperCase()
 
 // A whole number of minutes, 0 (off) through 480 (8h). We accept the full range
 // on parse for forward-compat even though the picker only offers a short list.
@@ -304,6 +320,11 @@ export const parseSettings = (stored: unknown): Settings => {
     ambientAutoStart: bool(source.ambientAutoStart, defaults.ambientAutoStart),
     childLock: bool(source.childLock, defaults.childLock),
     sceneEnabled: bool(source.sceneEnabled, defaults.sceneEnabled),
+    friend: isValidFriend(source.friend) ? source.friend : defaults.friend,
+    starShape: isValidStarShape(source.starShape) ? source.starShape : defaults.starShape,
+    childInitial: isValidInitial(source.childInitial)
+      ? normalizeInitial(source.childInitial)
+      : defaults.childInitial,
     chimeEnabled: typeof source.chimeEnabled === 'boolean'
       ? source.chimeEnabled
       : defaults.chimeEnabled,
