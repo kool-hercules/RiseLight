@@ -1,5 +1,5 @@
 import { readonly, ref, watch } from 'vue'
-import type { AmbientSoundId, DaySchedule, Settings } from '../types'
+import type { AmbientSoundId, DaySchedule, FriendId, Settings, StarShape } from '../types'
 import {
   createDefaultSettings,
   getBrowserStorage,
@@ -10,11 +10,15 @@ import {
   isValidColor,
   isValidDaySchedule,
   isValidDuration,
+  isValidFriend,
+  isValidInitial,
   isValidOkayTime,
   isValidNapMinutes,
   isValidSleepTimer,
+  isValidStarShape,
   isValidWindDown,
   loadSettingsFromStorage,
+  normalizeInitial,
   normalizeWakeTime,
   parseSettingsJson,
   saveSettingsToStorage,
@@ -150,6 +154,24 @@ const updateSleepTimerMinutes = (minutes: number): void => {
   }
 }
 
+const updateFriend = (friend: FriendId): void => {
+  if (isValidFriend(friend)) {
+    settingsState.value.friend = friend
+  }
+}
+
+const updateStarShape = (shape: StarShape): void => {
+  if (isValidStarShape(shape)) {
+    settingsState.value.starShape = shape
+  }
+}
+
+const updateChildInitial = (initial: string): void => {
+  if (isValidInitial(initial)) {
+    settingsState.value.childInitial = normalizeInitial(initial)
+  }
+}
+
 const toggleSettings = (): void => {
   isSettingsOpen.value = !isSettingsOpen.value
 }
@@ -192,6 +214,9 @@ const settingsApi = {
   updateAmbientSound,
   updateAmbientVolume,
   updateSleepTimerMinutes,
+  updateFriend,
+  updateStarShape,
+  updateChildInitial,
   toggleSettings,
   resetSettings,
   exportSettings,

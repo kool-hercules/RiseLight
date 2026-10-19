@@ -21,6 +21,9 @@
           :brightness="displayBrightness"
           :preview-mode="previewMode"
           :muted="parentVisible"
+          :friend="settings.friend"
+          :star-shape="settings.starShape"
+          :child-initial="settings.childInitial"
         />
       </template>
     </NightLight>
@@ -41,6 +44,7 @@
       :child-lock="settings.childLock"
       :brightness="isLit ? settings.brightness[currentState as LightMode] : null"
       :volume="settings.ambientVolume"
+      :sound-icon="playingSoundIcon"
       @update-brightness="value => isLit && updateBrightness(currentState as LightMode, value)"
       @update-volume="ambient.setVolume"
       @toggle-light="handleToggleNightLight"
@@ -71,6 +75,9 @@
       @update-ambient-sound="ambient.selectSound"
       @update-ambient-volume="ambient.setVolume"
       @update-sleep-timer="ambient.setSleepTimer"
+      @update-friend="updateFriend"
+      @update-star-shape="updateStarShape"
+      @update-child-initial="updateChildInitial"
       @stop-sound="ambient.stopSound"
       @preview-mode="startPreview"
       @stop-preview="stopPreview"
@@ -100,6 +107,7 @@ import { useAmbient } from '../composables/useAmbient'
 import { useWakeAlarm } from '../composables/useWakeAlarm'
 import { MODE_PRESENTATION, describePhase, isSleepPhase, stateIcon } from '../utils/modes'
 import { formatClockTime } from '../utils/time'
+import { AMBIENT_SOUNDS } from '../utils/ambient'
 import { useRoutineAudio } from '../composables/useRoutineAudio'
 import { useParentLayer } from '../composables/useParentLayer'
 
@@ -118,6 +126,9 @@ const {
   updateColor,
   updateChimeEnabled,
   updateLastNapMinutes,
+  updateFriend,
+  updateStarShape,
+  updateChildInitial,
   resetSettings
 } = useSettings()
 
@@ -208,6 +219,9 @@ const chime = useChime(computed(() => settings.value.chimeEnabled))
 const ambient = useAmbient()
 const activeSoundId = ambient.activeSoundId
 const isSoundPlaying = ambient.isPlaying
+const playingSoundIcon = computed(() =>
+  AMBIENT_SOUNDS.find(sound => sound.id === activeSoundId.value)?.icon ?? null
+)
 
 const { needsAudioUnlock, startAmbient, primeAudio } = useRoutineAudio({
   currentState,

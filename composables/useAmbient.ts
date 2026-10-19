@@ -146,6 +146,9 @@ export const useAmbient = () => {
     stopSound,
     stopPlayback,
     setVolume,
-    setSleepTimer
+    setSleepTimer,
+    // For the sound icons (useSoundLevels): read the live audio.
+    readAudio: player.readAudio,
+    sampleRate: player.sampleRate
   }
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  ANALYSER_FFT_SIZE,
   createAmbientPlayer,
   generateBrown,
   generatePink,
@@ -169,6 +170,45 @@ describe('ambient player', () => {
 
     player.setVolume(-1)
     expect(master.gain.value).toBe(0)
+  })
+
+  it('feeds an analyser ahead of the volume so the sound icons can read it', async () => {
+    const analyser = {
+      fftSize: 2048,
+      smoothingTimeConstant: 0.8,
+      getByteFrequencyData: vi.fn((out: Uint8Array) => out.fill(7)),
+      getFloatTimeDomainData: vi.fn((out: Float32Array) => out.fill(0.25))
+    }
+    const ctx = new FakeAudioContext('suspended') as FakeAudioContext & { createAnalyser: () => unknown }
+    ctx.createAnalyser = () => analyser
+    const player = createAmbientPlayer({ factory: () => ctx as never })
+    const frequency = new Uint8Array(ANALYSER_FFT_SIZE / 2)
+    const timeDomain = new Float32Array(ANALYSER_FFT_SIZE)
+
+    await player.prime()
+    expect(player.readAudio(frequency, timeDomain)).toBe(false) // nothing playing yet
+
+    await player.play('rain')
+    expect(analyser.fftSize).toBe(ANALYSER_FFT_SIZE)
+    const [master, bus] = ctx.gains
+    expect(bus.connect).toHaveBeenCalledWith(master)
+    expect(bus.connect).toHaveBeenCalledWith(analyser)
+    expect(player.readAudio(frequency, timeDomain)).toBe(true)
+    expect(frequency[0]).toBe(7)
+    expect(timeDomain[0]).toBe(0.25)
+    expect(player.sampleRate()).toBe(44_100)
+
+    await player.stop()
+    expect(player.readAudio(frequency, timeDomain)).toBe(false)
+  })
+
+  it('still plays when the context has no analyser; readAudio just reports nothing', async () => {
+    const ctx = new FakeAudioContext('suspended')
+    const player = createAmbientPlayer({ factory: () => ctx as never })
+
+    await player.play('fan')
+    expect(player.isPlaying()).toBe(true)
+    expect(player.readAudio(new Uint8Array(256), new Float32Array(512))).toBe(false)
   })
 
   it('fades out and stops', async () => {

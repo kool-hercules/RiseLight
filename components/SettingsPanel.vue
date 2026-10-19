@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import type { AmbientSoundId, DaySchedule, LightMode, Settings } from '../types'
+import type { AmbientSoundId, DaySchedule, FriendId, LightMode, Settings, StarShape } from '../types'
 import { SLEEP_TIMER_OPTIONS } from '../types'
+import { useSoundLevels } from '../composables/useSoundLevels'
+import { FRIENDS, STAR_SHAPE_OPTIONS, friendName } from '../utils/friends'
+import NightFriend from './NightFriend.vue'
 import { MODE_ORDER, MODE_PRESENTATION } from '../utils/modes'
 import { AMBIENT_SOUNDS } from '../utils/ambient'
 import ModeIcon from './ModeIcon.vue'
@@ -33,6 +36,9 @@ const emit = defineEmits<{
   'update-ambient-sound': [id: AmbientSoundId]
   'update-ambient-volume': [value: number]
   'update-sleep-timer': [minutes: number]
+  'update-friend': [friend: FriendId]
+  'update-star-shape': [shape: StarShape]
+  'update-child-initial': [initial: string]
   'stop-sound': []
   'preview-mode': [mode: LightMode]
   'stop-preview': []
@@ -43,6 +49,20 @@ const emit = defineEmits<{
 const modes = MODE_ORDER.map(key => ({ key, ...MODE_PRESENTATION[key] }))
 const ambientSounds = AMBIENT_SOUNDS
 const sleepOptions = SLEEP_TIMER_OPTIONS
+const friends = FRIENDS
+const starShapes = STAR_SHAPE_OPTIONS
+
+// The playing sound's tile moves with the audio, but only while the panel is
+// actually open (the meter stops otherwise).
+const soundLevels = useSoundLevels(computed(() => props.isOpen && !props.previewMode && Boolean(props.isSoundPlaying)))
+
+// Keep only the last letter typed; anything that isn't A-Z clears it.
+const onInitialInput = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const letter = target.value.replace(/[^a-z]/gi, '').slice(-1).toUpperCase()
+  target.value = letter
+  emit('update-child-initial', letter)
+}
 
 // Move focus into the preview dock when it opens so keyboard users land on its
 // controls instead of being stranded behind the full-screen preview.
@@ -285,7 +305,11 @@ const confirmReset = () => {
               class="sound-tile"
               :class="{ 'sound-tile--active': settings.ambientSound === sound.id }"
             >
-              <SoundIcon :name="sound.icon" class="w-6 h-6" />
+              <SoundIcon
+                :name="sound.icon"
+                :levels="activeSoundId === sound.id && isSoundPlaying ? soundLevels : null"
+                class="w-6 h-6"
+              />
               <span class="sound-label">{{ sound.label }}</span>
               <span
                 v-if="activeSoundId === sound.id && isSoundPlaying"
@@ -358,16 +382,14 @@ const confirmReset = () => {
           </label>
         </div>
 
-        <!-- Colors and Brightness -->
+        <!-- Kid screen: the picture, the night friend and the story-time stars -->
         <div class="mb-6">
-          <h3 class="text-sm font-medium mb-1">Colors &amp; brightness</h3>
-          <p class="text-xs text-gray-500 mb-3">Tap Preview to see any color fill the screen.</p>
-
+          <h3 class="text-sm font-medium mb-3">Kid screen</h3>
           <label class="flex items-center justify-between gap-4 cursor-pointer mb-4">
             <span>
               <span class="block text-sm font-medium">Show picture</span>
               <span class="block text-xs text-gray-500 mt-1">
-                A simple moon-and-sun scene little ones can read. Off: just the glow.
+                A night friend under a moon-and-sun sky little ones can read. Off: just the glow.
               </span>
             </span>
             <input
@@ -379,6 +401,70 @@ const confirmReset = () => {
               aria-label="Show picture"
             >
           </label>
+
+          <template v-if="settings.sceneEnabled">
+            <p class="block text-sm font-medium mb-1">Night friend</p>
+            <p class="text-xs text-gray-500 mb-2">
+              Reads at story time, sleeps through the night, peeks when morning is near and stretches when it’s okay to get up.
+            </p>
+            <div class="friend-grid mb-4" role="radiogroup" aria-label="Night friend">
+              <button
+                v-for="friend in friends"
+                :key="friend.id"
+                role="radio"
+                :aria-checked="settings.friend === friend.id"
+                class="friend-tile"
+                :class="{ 'friend-tile--active': settings.friend === friend.id }"
+                @click="emit('update-friend', friend.id)"
+              >
+                <NightFriend :friend="friend.id" pose="asleep" class="friend-portrait" />
+                <span class="text-sm font-medium">{{ friend.name }}</span>
+                <span class="text-xs text-gray-400 leading-tight">{{ friend.description }}</span>
+              </button>
+            </div>
+
+            <p class="block text-sm font-medium mb-1">Story-time stars</p>
+            <p class="text-xs text-gray-500 mb-2">
+              During story time the stars join up, one line at a time, and finish just before lights out.
+            </p>
+            <div class="timer-row" role="radiogroup" aria-label="Story-time stars">
+              <button
+                v-for="shape in starShapes"
+                :key="shape.id"
+                role="radio"
+                :aria-checked="settings.starShape === shape.id"
+                class="timer-chip"
+                :class="{ 'timer-chip--active': settings.starShape === shape.id }"
+                @click="emit('update-star-shape', shape.id)"
+              >
+                {{ shape.id === 'friend' ? friendName(settings.friend) : shape.label }}
+              </button>
+            </div>
+            <label v-if="settings.starShape === 'initial'" class="flex items-center justify-between gap-4 mt-3">
+              <span>
+                <span class="block text-sm font-medium">Initial</span>
+                <span class="block text-xs text-gray-500 mt-1">One letter, A to Z. Until it’s set, the stars draw {{ friendName(settings.friend) }}.</span>
+              </span>
+              <input
+                type="text"
+                inputmode="text"
+                autocapitalize="characters"
+                autocomplete="off"
+                maxlength="2"
+                :value="settings.childInitial"
+                class="initial-input"
+                aria-label="Child’s initial"
+                @input="onInitialInput"
+              >
+            </label>
+          </template>
+        </div>
+
+        <!-- Colors and Brightness -->
+        <div class="mb-6">
+          <h3 class="text-sm font-medium mb-1">Colors &amp; brightness</h3>
+          <p class="text-xs text-gray-500 mb-3">Tap Preview to see any color fill the screen.</p>
+
 
           <div
             v-for="mode in modes"
@@ -558,6 +644,38 @@ const confirmReset = () => {
   .sound-playing {
     animation: none;
   }
+}
+
+/* Night friend picker: three portrait tiles. */
+.friend-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.friend-tile {
+  @apply flex flex-col items-center gap-0.5 bg-gray-800/60 hover:bg-gray-700 text-gray-200 rounded-lg transition-colors text-center;
+  padding: 0.5rem 0.375rem 0.625rem;
+  touch-action: manipulation;
+}
+
+.friend-tile--active {
+  @apply bg-blue-600/30 text-white;
+  box-shadow: inset 0 0 0 1.5px #3b82f6;
+}
+
+.friend-portrait {
+  width: 100%;
+  max-width: 96px;
+  height: auto;
+  color: #fbbf77;
+}
+
+.initial-input {
+  @apply bg-gray-800 text-white text-center text-xl font-semibold rounded-lg border border-gray-600 shrink-0;
+  width: 52px;
+  height: 52px;
+  text-transform: uppercase;
 }
 
 /* Ensure inputs are touch-friendly on mobile */

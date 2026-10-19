@@ -42,6 +42,17 @@ export const AMBIENT_SOUND_IDS: readonly AmbientSoundId[] = [
 // accepts any 0–480 for forward-compatibility, but the picker uses this list.
 export const SLEEP_TIMER_OPTIONS: readonly number[] = [0, 15, 30, 45, 60, 90, 120]
 
+// The kid screen's night friend. Every friend has the same four poses.
+export type FriendId = 'bo' | 'pip' | 'puff'
+
+export const FRIEND_IDS: readonly FriendId[] = ['bo', 'pip', 'puff']
+
+// What the story-time stars join up into: the friend's face, the child's
+// initial, or a heart.
+export type StarShape = 'friend' | 'initial' | 'heart'
+
+export const STAR_SHAPES: readonly StarShape[] = ['friend', 'initial', 'heart']
+
 // One-tap nap durations, in minutes.
 export const NAP_OPTIONS: readonly number[] = [30, 45, 60, 90, 120]
 
@@ -57,6 +68,9 @@ export type Settings = {
   ambientAutoStart: boolean // start the saved sound at bedtime
   childLock: boolean // parent controls behind a 3-second hold
   sceneEnabled: boolean // show the kid picture over the glow
+  friend: FriendId // who sleeps on the kid screen
+  starShape: StarShape // what the story-time stars join into
+  childInitial: string // one capital letter A-Z, or '' when unset
   chimeEnabled: boolean // play a gentle chime when it becomes okay to get up
   ambientSound: AmbientSoundId | null // last-selected ambient sound, null = none
   ambientVolume: number // 0..100, master volume for ambient sound
