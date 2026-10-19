@@ -24,15 +24,29 @@ like the Hatch. Built with Vue 3 + Nuxt 3, installable as a PWA.
   morning cue still comes), or start the night early. Start now right after
   Off for now is an undo: the schedule carries on where it was.
 - **Kid-first screen with a child lock**: the kid screen is purely visual -- a
-  glow and a simple scene (lamp and book, moon and sleeping friend, sun rising
-  over hills, full sun) painted only in the current light colour. Parent
+  glow and a calm scene painted only in the current light colour. Parent
   controls open by holding the clock for 3 seconds and hide themselves again.
   They carry quick brightness and volume sliders for 2 AM adjustments.
+- **Night friend**: Bo (a bear cub), Pip (a bunny) or Puff (a little cloud)
+  reads at story time, sleeps through the night, peeks with one eye during
+  almost time and stretches when it's okay to get up. It only ever breathes,
+  at 6 breaths a minute.
+- **Story-time constellation**: during story time the stars join up, one faint
+  line at a time, into the friend's face, the child's initial or a heart. The
+  picture finishes just before lights out, so it doubles as a wind-down
+  countdown, then fades to a hint for the night.
+- **Calm by design**: on the kid screen the friend's breathing is the only
+  steady motion. The moon and sun move with the routine itself, too slowly to
+  see; nothing twinkles, bounces or spins.
 - **Ambient sounds**: white / pink / brown noise plus rain, ocean, fan, wind,
   and a soft heartbeat, all **synthesized in the browser** (no audio files,
   perfect infinite loops, fully offline), with volume and a fading **sleep
   timer**. Optionally starts by itself at story time and stops at "okay to get
-  up".
+  up". In settings and the parent controls the **sound icons move with the
+  actual audio** (an analyser taps the engine ahead of the volume control):
+  rain falls as fast as the hiss, waves swell with the ocean, the fan spins
+  with its whir, the heart swells on each thump. Silent sounds hold still, and
+  so does everything with reduced motion on.
 - **Okay-to-get-up chime**: an optional gentle chime at the wake transition.
 - **Installable PWA**: add to home screen, runs full-screen and **offline**
   after a single online visit.
@@ -143,13 +157,14 @@ later; it needs no rewrite.
 ## Project structure
 
 ```
-├── components/        NightLight (kid layer), KidScene, ParentControls, HoldToUnlock,
-│                      SettingsPanel, ScheduleEditor, HelpPopover, icons
-├── composables/       useNightLight, useSettings, useAmbient, useChime, useWakeLock,
-│                      useKeepAwake, useWakeAlarm, useOnboarding,
+├── components/        NightLight (kid layer), KidScene, NightFriend, ParentControls,
+│                      HoldToUnlock, SettingsPanel, ScheduleEditor, HelpPopover, icons
+├── composables/       useNightLight, useSettings, useAmbient, useSoundLevels, useChime,
+│                      useWakeLock, useKeepAwake, useWakeAlarm, useOnboarding,
 │                      useRoutineAudio, useParentLayer
 ├── pages/index.vue    template and wiring only
-├── utils/             pure logic: routine, override, ramp, settings, alarm, ambient, chime, …
+├── utils/             pure logic: routine, override, ramp, settings, alarm, ambient, chime,
+│                      constellations, soundLevels, …
 ├── public/            manifest, service worker, icons, sounds/ (optional recordings)
 ├── tests/             vitest suites (engine, component, composable)
 └── e2e/               Playwright specs and a static server for the generated build

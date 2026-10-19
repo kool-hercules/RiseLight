@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { LightMode } from '../types'
 import { NAP_OPTIONS } from '../types'
 import type { ModeIconName } from '../utils/modes'
+import type { SoundIconName } from '../utils/ambient'
+import { useSoundLevels } from '../composables/useSoundLevels'
 import ModeIcon from './ModeIcon.vue'
+import SoundIcon from './SoundIcon.vue'
 import { parentIdleMs } from '../utils/parentLayer'
 
 // Everything a parent needs, kept off the kid screen: start/stop, nap, sound,
@@ -34,6 +37,7 @@ const props = defineProps<{
   childLock: boolean
   brightness: number | null // the current phase's brightness, null while dark
   volume: number
+  soundIcon?: SoundIconName | null // the playing sound's glyph, shown by the volume slider
 }>()
 
 const emit = defineEmits<{
@@ -46,6 +50,9 @@ const emit = defineEmits<{
   'update-volume': [value: number]
   close: []
 }>()
+
+// The volume row's glyph moves with the sound that's playing.
+const soundLevels = useSoundLevels(computed(() => props.isSoundPlaying && Boolean(props.soundIcon)))
 
 const sliderValue = (event: Event): number => Number((event.target as HTMLInputElement).value)
 
@@ -158,7 +165,8 @@ onBeforeUnmount(() => {
           >
         </label>
         <label v-if="isSoundPlaying" class="quick-row">
-          <svg class="w-4 h-4 shrink-0 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <SoundIcon v-if="soundIcon" :name="soundIcon" :levels="soundLevels" class="w-5 h-5 shrink-0 text-white/70" data-test="playing-sound-icon" />
+          <svg v-else class="w-4 h-4 shrink-0 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M11 5L6 9H2v6h4l5 4V5z" />
             <path d="M15.5 8.5a5 5 0 010 7" />
           </svg>

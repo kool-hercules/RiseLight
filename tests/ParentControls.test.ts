@@ -178,6 +178,13 @@ describe('ParentControls quick sliders', () => {
     expect(wrapper.emitted('update-volume')).toEqual([[70]])
   })
 
+  it('labels the volume slider with the playing sound’s glyph', async () => {
+    const wrapper = mountControls({ isSoundPlaying: true })
+    expect(wrapper.find('[data-test="playing-sound-icon"]').exists()).toBe(false)
+    await wrapper.setProps({ soundIcon: 'rain' } as never)
+    expect(wrapper.find('[data-test="playing-sound-icon"]').exists()).toBe(true)
+  })
+
   it('shows neither block while dark and silent', () => {
     expect(mountControls({ brightness: null, isSoundPlaying: false }).find('.quick-adjust').exists()).toBe(false)
   })

@@ -65,6 +65,11 @@ onMounted(() => titleRef.value?.focus())
         <li>With the gear icon, set each day’s bedtime and the time it’s okay to get up (the light
           turns green then, after a short sunrise), plus sounds and colors.</li>
         <li>
+          <span class="text-gray-300">Night friend:</span> Bo, Pip or Puff reads along at story time while the
+          stars join up into a picture, finished just before lights out. Then the friend sleeps, peeks when
+          morning is near and stretches when it’s okay to get up. Pick the friend and the picture in settings.
+        </li>
+        <li>
           <span class="text-gray-300">Child lock:</span> the kid screen has no buttons. Hold the clock
           for 3 seconds to open the parent controls; they hide again on their own.
         </li>
