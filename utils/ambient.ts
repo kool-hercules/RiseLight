@@ -6,7 +6,8 @@
 // recording is preferred when present and reachable, otherwise the synthesized
 // approximation always plays, so a sound is never silent.
 //
-// The graph is always:  source subgraph → masterGain → destination
+// The graph is always:  source subgraph → bus → masterGain → destination
+//                                          bus → analyser (feeds the sound icons)
 // One persistent masterGain owns the user's volume and survives sound switches.
 //
 // iOS autoplay: playback always *starts* from a user tap (picking a sound), so
@@ -38,7 +39,11 @@ export type AmbientAudioContext = Pick<
   | 'createBiquadFilter'
   | 'createOscillator'
   | 'decodeAudioData'
->
+> & {
+  // Optional so a context without an analyser (and the test fakes) still plays;
+  // the sound icons simply stay still.
+  createAnalyser?: AudioContext['createAnalyser']
+}
 
 export type AmbientContextFactory = () => AmbientAudioContext | null
 
@@ -71,8 +76,17 @@ export interface AmbientPlayer {
   fadeOutAndStop: (seconds: number) => Promise<void>
   isPlaying: () => boolean
   currentId: () => AmbientSoundId | null
+  // Copy the live spectrum and waveform (before the volume control) into the
+  // given arrays for the sound icons. False when nothing can be read: no
+  // analyser, or nothing playing.
+  readAudio: (frequency: Uint8Array, timeDomain: Float32Array) => boolean
+  sampleRate: () => number
   dispose: () => Promise<void>
 }
+
+// Analyser size: 512 gives 256 bins (~86 Hz each at 44.1 kHz), plenty for a
+// handful of icon levels and cheap to read 20 times a second.
+export const ANALYSER_FFT_SIZE = 512
 
 export interface AmbientDeps {
   factory?: AmbientContextFactory
@@ -255,6 +269,10 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
 
   let context: AmbientAudioContext | null = null
   let masterGain: GainNode | null = null
+  // Every voice feeds this bus; the bus feeds the master volume and, in
+  // parallel, the analyser, so the icons see the sound regardless of volume.
+  let bus: GainNode | null = null
+  let analyser: AnalyserNode | null = null
   let current: { id: AmbientSoundId; voice: Voice } | null = null
   let volume = 1
   let playToken = 0
@@ -274,15 +292,33 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
     return context
   }
 
-  const ensureMaster = (ctx: AmbientAudioContext): GainNode => {
-    if (masterGain) {
-      return masterGain
+  // Returns the node voices connect to (the bus in front of the master).
+  const ensureInput = (ctx: AmbientAudioContext): GainNode => {
+    if (masterGain && bus) {
+      return bus
     }
     const gain = ctx.createGain()
     gain.gain.setValueAtTime(volume, ctx.currentTime)
     gain.connect(ctx.destination)
     masterGain = gain
-    return gain
+
+    const input = ctx.createGain()
+    input.gain.setValueAtTime(1, ctx.currentTime)
+    input.connect(gain)
+    bus = input
+
+    try {
+      const node = ctx.createAnalyser?.() ?? null
+      if (node) {
+        node.fftSize = ANALYSER_FFT_SIZE
+        node.smoothingTimeConstant = 0.6
+        input.connect(node)
+        analyser = node
+      }
+    } catch {
+      analyser = null
+    }
+    return input
   }
 
   const resumeIfNeeded = async (ctx: AmbientAudioContext): Promise<void> => {
@@ -475,7 +511,7 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
       return true
     }
     await resumeIfNeeded(ctx)
-    ensureMaster(ctx)
+    ensureInput(ctx)
     return ctx.state === 'running'
   }
 
@@ -495,7 +531,7 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
       return true
     }
 
-    const master = ensureMaster(ctx)
+    const master = ensureInput(ctx)
 
     // Build the new voice first (recording if available, else synth). This may
     // await a fetch/decode, so re-check the token before mutating state.
@@ -559,10 +595,25 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
     }
   }
 
+  const readAudio = (frequency: Uint8Array, timeDomain: Float32Array): boolean => {
+    if (!analyser || !current) {
+      return false
+    }
+    try {
+      analyser.getByteFrequencyData(frequency)
+      analyser.getFloatTimeDomainData(timeDomain)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   const dispose = async (): Promise<void> => {
     playToken++
     current = null
     masterGain = null
+    bus = null
+    analyser = null
     noiseBuffers.clear()
     decodedBuffers.clear()
     const ctx = context
@@ -584,6 +635,8 @@ export const createAmbientPlayer = (deps: AmbientDeps = {}): AmbientPlayer => {
     fadeOutAndStop,
     isPlaying: () => current !== null,
     currentId: () => current?.id ?? null,
+    readAudio,
+    sampleRate: () => context?.sampleRate ?? 44_100,
     dispose
   }
 }
