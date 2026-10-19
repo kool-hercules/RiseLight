@@ -11,12 +11,13 @@ like the Hatch. Built with Vue 3 + Nuxt 3, installable as a PWA.
   - **Story time**: a warm, soft amber to wind down before lights out.
   - **Stay in bed**: a dim, low-blue-light red through the night.
   - **Almost time**: a continuous sunrise ramp through amber during the wake-up
-    window.
-  - **Okay to get up!**: a gentle green, held for a set time, then the screen
-    goes quiet (near-black, dim clock) for the day.
-- **Weekly schedule**: bedtime and sunrise start per day, with "Same every
-  day", "Weekdays & weekends" and "Custom" presets. The editor shows when each
-  morning turns green.
+    window just before green.
+  - **Okay to get up!**: a gentle green at the time you set, held for a set
+    time, then the screen goes quiet (near-black, dim clock) for the day.
+- **Weekly schedule**: bedtime and okay-to-get-up time per day, with "Same
+  every day", "Weekdays & weekends" and "Custom" presets. The editor shows
+  when each morning's sunrise starts; changing the wake-up window moves the
+  sunrise, never the green time.
 - **One-tap nap**: night → short sunrise → 15 minutes of green. A nap that runs
   into the evening routine hands straight back to it with no green.
 - **Off for now / Start now**: switch off until the routine's next step (the
@@ -42,8 +43,8 @@ like the Hatch. Built with Vue 3 + Nuxt 3, installable as a PWA.
 
 ## How it works
 
-1. Set bedtimes and sunrise times (and optionally a sound) in settings. Green
-   ("okay to get up") comes one wake-up window after the sunrise starts.
+1. Set bedtimes and okay-to-get-up times (and optionally a sound) in
+   settings. The sunrise starts one wake-up window before green.
 2. Leave RiseLight open, on screen and plugged in by the bed. It runs story
    time → stay in bed → almost time → okay to get up every day on its own.
 3. To open the parent controls, **hold the clock for 3 seconds** (or turn the
@@ -68,7 +69,8 @@ npm run typecheck # type-check
 QA tips:
 
 - `?clock=06:29&rate=120` starts the simulated clock at 06:29 today and runs it
-  120× faster, so a 30-minute wake window plays out in 15 seconds.
+  120× faster, so the default 30-minute sunrise (06:30, green at 07:00) plays
+  out in 15 seconds.
 - `?clock=2026-10-17T05:50` starts at a full local date and time, to test a
   specific weekday's schedule row (e.g. a Saturday wake-up).
 - `?clock=2026-10-16T19:05&rate=240` walks a whole evening: story time → night.
@@ -123,7 +125,8 @@ re-running a single spec; with no build at all the server refuses to start.
   `Date`.
 - State lives in **module-singleton composables** (`useSettings`, `useAmbient`,
   …), persisted to **localStorage** with schema versioning, validation and
-  migration (settings v2; the override in its own key). (The
+  migration (settings v3, which stores each day's okay-to-get-up time and
+  migrates v1/v2 sunrise starts to it exactly; the override in its own key). (The
   audio engines are framework-agnostic and unit-tested with fake AudioContexts.)
 - **Web Audio API** for the chime (`utils/chime.ts`) and ambient sounds
   (`utils/ambient.ts`) — no audio assets shipped.

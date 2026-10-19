@@ -3,6 +3,8 @@ import { computed, ref, watch } from 'vue'
 import type { DaySchedule, Settings } from '../types'
 import { formatClockTime } from '../utils/time'
 import {
+  OKAY_TIME_EARLIEST,
+  OKAY_TIME_LATEST,
   buildSameSchedule,
   buildSplitSchedule,
   detectSchedulePreset,
@@ -34,6 +36,13 @@ const DAYS = [
   { day: 6, label: 'Sat' },
   { day: 0, label: 'Sun' }
 ]
+
+// Weekday okay times cover Mon–Fri mornings and weekday bedtimes Sun–Thu
+// evenings: the nights before school days.
+const SPLIT_GROUPS = [
+  { key: 'weekday', title: 'School nights', days: '(okay Mon–Fri, bedtime Sun–Thu)' },
+  { key: 'weekend', title: 'Weekend', days: '(okay Sat–Sun, bedtime Fri–Sat)' }
+] as const
 
 const presets: { key: SchedulePreset; label: string }[] = [
   { key: 'same', label: 'Same every day' },
@@ -71,12 +80,15 @@ const choosePreset = (next: SchedulePreset) => {
 
 const parts = computed(() => splitScheduleParts(props.settings.schedule))
 
-// The schedule stores when the sunrise *starts*; the time a parent actually
-// thinks in is when it turns green. Show it next to every wake input.
-const greenAt = (wakeTime: string): string => {
-  const [hours, minutes] = wakeTime.split(':').map(Number)
-  return formatClockTime(new Date(2000, 0, 1, hours, minutes + props.settings.wakeDuration))
+// The schedule stores the green time, the number parents think in. The sunrise
+// starts one wake-up window before it; show that as a hint.
+const sunriseAt = (okayTime: string): string => {
+  const [hours, minutes] = okayTime.split(':').map(Number)
+  return formatClockTime(new Date(2000, 0, 1, hours, minutes - props.settings.wakeDuration))
 }
+
+const sunriseHint = (okayTime: string): string =>
+  `Sunrise starts at ${sunriseAt(okayTime)} (${props.settings.wakeDuration} min window)`
 
 // The typed time, or null when it's empty or out of range. A rejected value is
 // put back to the saved one and the reason shown, so the input never displays
@@ -162,53 +174,52 @@ const onWakeDuration = (event: Event) => {
     <!-- Same every day -->
     <div v-if="preset === 'same'" class="grid grid-cols-2 gap-3 mb-2">
       <label class="block">
+        <span class="okay-label mb-1"><span class="okay-swatch" :style="{ backgroundColor: settings.colors.awake }" />Okay to get up</span>
+        <input type="time" :min="OKAY_TIME_EARLIEST" :max="OKAY_TIME_LATEST" :value="parts.weekday.okayTime" @change="setSame('okayTime', $event)" class="time-input">
+      </label>
+      <label class="block">
         <span class="block text-xs text-gray-400 mb-1">Bedtime</span>
         <input type="time" min="15:00" max="23:59" :value="parts.weekday.bedtime" @change="setSame('bedtime', $event)" class="time-input">
       </label>
-      <label class="block">
-        <span class="block text-xs text-gray-400 mb-1">Sunrise starts</span>
-        <input type="time" min="04:00" max="12:00" :value="parts.weekday.wakeTime" @change="setSame('wakeTime', $event)" class="time-input">
-      </label>
-      <p class="col-span-2 text-xs text-gray-300">Okay to get up at <span class="text-green-400 font-medium">{{ greenAt(parts.weekday.wakeTime) }}</span></p>
+      <p class="col-span-2 text-xs text-gray-400">{{ sunriseHint(parts.weekday.okayTime) }}</p>
     </div>
 
     <!-- Weekdays & weekends -->
     <div v-else-if="preset === 'split'" class="space-y-3 mb-2">
-      <div>
-        <p class="text-xs text-gray-300 mb-1">School nights <span class="text-gray-500">(bedtime Sun–Thu, sunrise Mon–Fri)</span></p>
+      <div v-for="group in SPLIT_GROUPS" :key="group.key">
+        <p class="text-xs text-gray-300 mb-1">{{ group.title }} <span class="text-gray-500">{{ group.days }}</span></p>
         <div class="grid grid-cols-2 gap-3">
-          <input type="time" min="15:00" max="23:59" :value="parts.weekday.bedtime" @change="setSplit('weekday', 'bedtime', $event)" class="time-input" aria-label="School-night bedtime">
-          <input type="time" min="04:00" max="12:00" :value="parts.weekday.wakeTime" @change="setSplit('weekday', 'wakeTime', $event)" class="time-input" aria-label="Weekday sunrise starts">
+          <label class="block">
+            <span class="okay-label mb-1"><span class="okay-swatch" :style="{ backgroundColor: settings.colors.awake }" />Okay to get up</span>
+            <input type="time" :min="OKAY_TIME_EARLIEST" :max="OKAY_TIME_LATEST" :value="parts[group.key].okayTime" @change="setSplit(group.key, 'okayTime', $event)" class="time-input" :aria-label="`${group.title} okay to get up`">
+          </label>
+          <label class="block">
+            <span class="block text-xs text-gray-400 mb-1">Bedtime</span>
+            <input type="time" min="15:00" max="23:59" :value="parts[group.key].bedtime" @change="setSplit(group.key, 'bedtime', $event)" class="time-input" :aria-label="`${group.title} bedtime`">
+          </label>
         </div>
-        <p class="text-xs text-gray-400 mt-1">Okay to get up at <span class="text-green-400">{{ greenAt(parts.weekday.wakeTime) }}</span></p>
-      </div>
-      <div>
-        <p class="text-xs text-gray-300 mb-1">Weekend <span class="text-gray-500">(bedtime Fri–Sat, sunrise Sat–Sun)</span></p>
-        <div class="grid grid-cols-2 gap-3">
-          <input type="time" min="15:00" max="23:59" :value="parts.weekend.bedtime" @change="setSplit('weekend', 'bedtime', $event)" class="time-input" aria-label="Weekend bedtime">
-          <input type="time" min="04:00" max="12:00" :value="parts.weekend.wakeTime" @change="setSplit('weekend', 'wakeTime', $event)" class="time-input" aria-label="Weekend sunrise starts">
-        </div>
-        <p class="text-xs text-gray-400 mt-1">Okay to get up at <span class="text-green-400">{{ greenAt(parts.weekend.wakeTime) }}</span></p>
+        <p class="text-xs text-gray-400 mt-1">{{ sunriseHint(parts[group.key].okayTime) }}</p>
       </div>
     </div>
 
     <!-- Custom: one row per day -->
     <div v-else class="mb-2">
-      <div class="grid grid-cols-[2.5rem_1fr_3.5rem_1fr] gap-x-3 gap-y-2 items-center">
+      <div class="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-2 items-start">
         <span />
-        <span class="text-xs text-gray-400">Sunrise starts</span>
-        <span class="text-xs text-gray-400">Green</span>
+        <span class="okay-label"><span class="okay-swatch" :style="{ backgroundColor: settings.colors.awake }" />Okay to get up</span>
         <span class="text-xs text-gray-400">Bedtime</span>
         <template v-for="row in DAYS" :key="row.day">
-          <span class="text-sm text-gray-300">{{ row.label }}</span>
-          <input type="time" min="04:00" max="12:00" :value="settings.schedule[row.day].wakeTime" @change="setDay(row.day, 'wakeTime', $event)" class="time-input" :aria-label="`${row.label} sunrise starts`">
-          <span class="text-xs text-green-400 tabular-nums">{{ greenAt(settings.schedule[row.day].wakeTime) }}</span>
-          <input type="time" min="15:00" max="23:59" :value="settings.schedule[row.day].bedtime" @change="setDay(row.day, 'bedtime', $event)" class="time-input" :aria-label="`${row.label} bedtime`">
+          <span class="text-sm text-gray-300 pt-2">{{ row.label }}</span>
+          <div>
+            <input type="time" :min="OKAY_TIME_EARLIEST" :max="OKAY_TIME_LATEST" :value="settings.schedule[row.day].okayTime" @change="setDay(row.day, 'okayTime', $event)" class="time-input time-input--compact" :aria-label="`${row.label} okay to get up`">
+            <span class="block text-[11px] text-gray-500 mt-0.5 tabular-nums">Sunrise {{ sunriseAt(settings.schedule[row.day].okayTime) }}</span>
+          </div>
+          <input type="time" min="15:00" max="23:59" :value="settings.schedule[row.day].bedtime" @change="setDay(row.day, 'bedtime', $event)" class="time-input time-input--compact" :aria-label="`${row.label} bedtime`">
         </template>
       </div>
     </div>
     <p v-if="timeError" class="text-xs text-amber-300 mb-5" role="alert">{{ timeError }}</p>
-    <p v-else class="text-xs text-gray-500 mb-5">The sunrise eases in over the wake-up window, then the light turns green. Sunrise between 4 AM and noon; bedtime between 3 PM and midnight.</p>
+    <p v-else class="text-xs text-gray-500 mb-5">The sunrise eases in over the wake-up window and turns green right on time. Okay to get up between 4 AM and 1 PM; bedtime between 3 PM and midnight.</p>
 
     <label class="block text-sm font-medium mb-2">Story time before bed</label>
     <div class="timer-row mb-1">
@@ -239,7 +250,7 @@ const onWakeDuration = (event: Event) => {
       aria-label="Wake-up window in minutes"
     >
     <p class="text-xs text-gray-500 mt-1 mb-5">
-      How long the sunrise eases in before it becomes “okay to get up”.
+      How long the sunrise eases in before “okay to get up”. Green stays at the time you set.
     </p>
 
     <label class="block text-sm font-medium mb-2">Show “okay to get up” for</label>
@@ -260,8 +271,18 @@ const onWakeDuration = (event: Event) => {
 </template>
 
 <style scoped>
+.okay-label {
+  @apply flex items-center gap-1.5 text-xs text-gray-400;
+}
+.okay-swatch {
+  @apply inline-block w-2.5 h-2.5 rounded-full shrink-0;
+}
 .time-input {
-  @apply w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500;
+  @apply w-full min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500;
   touch-action: manipulation;
+}
+/* The Custom grid fits two inputs beside the day name on a 390px phone. */
+.time-input--compact {
+  @apply px-2;
 }
 </style>

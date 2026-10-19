@@ -7,15 +7,24 @@ import { mixHex, rampBrightness, rampColor } from './ramp'
 // right phase with no anchors to re-sync.
 //
 // Night D (the evening of calendar day D) runs in segments:
-//   bedtime  bedtime(D) − windDown → bedtime(D)   ("Story time")
-//   night    bedtime(D) → wakeTime(D+1)            ("Stay in bed")
-//   wake     wakeTime(D+1) → + wakeDuration        ("Almost time", sunrise ramp)
-//   awake    → + awakeHoldMinutes                  ("Okay to get up!")
-// and is inactive (daytime idle) otherwise. Settings validation bounds bedtime
-// to 15:00–23:59 and wake to 04:00–12:00, so each night crosses midnight once
-// and only nights D−1 and D can cover any instant. Where they overlap, the
-// later night wins. Times are built on local calendar dates with setHours, so
-// DST is handled by Date itself.
+//   bedtime  bedtime(D) − windDown → bedtime(D)        ("Story time")
+//   night    bedtime(D) → okayTime(D+1) − wakeDuration ("Stay in bed")
+//   wake     → okayTime(D+1)                           ("Almost time", sunrise ramp)
+//   awake    okayTime(D+1) → + awakeHoldMinutes        ("Okay to get up!")
+// and is inactive (daytime idle) otherwise. The schedule stores the green time;
+// the ramp start is derived, so changing the wake-up window moves the sunrise
+// and keeps green fixed.
+//
+// Settings validation bounds bedtime to 15:00–23:59, okayTime to 04:00–13:00,
+// wakeDuration to 1–60, windDown to 0–60 and the hold to 1–240. So night D
+// starts no earlier than 14:00 on D, its ramp starts no earlier than 03:00 on
+// D+1 (after bedtime: every night crosses midnight exactly once), and it ends
+// no later than 17:00 on D+1. Hence only nights D−1 and D can cover any instant
+// of day D. Where they overlap (a long hold running into story time), the later
+// night wins. Times are built on local calendar dates with setHours, so DST is
+// handled by Date itself. The ramp start is okayTime minus real minutes, so the
+// ramp always lasts wakeDuration minutes; zones that jump at 02:00 never put a
+// jump inside it, since it starts at 03:00 or later.
 
 export type Override =
   | { kind: 'on'; start: number }
@@ -59,14 +68,16 @@ const atTime = (day: Date, time: string): number => {
   return at.getTime()
 }
 
+// The sunrise ramp start on `day`'s morning: its okay-to-get-up time minus the
+// wake-up window.
 const wakeOn = (day: Date, settings: Settings): number =>
-  atTime(day, settings.schedule[day.getDay()].wakeTime)
+  atTime(day, settings.schedule[day.getDay()].okayTime) - settings.wakeDuration * MINUTE
 
 const nightOf = (evening: Date, settings: Settings): Night => {
   const bedtime = atTime(evening, settings.schedule[evening.getDay()].bedtime)
   const morning = new Date(evening.getFullYear(), evening.getMonth(), evening.getDate() + 1)
-  const wakeAt = wakeOn(morning, settings)
-  const okayAt = wakeAt + settings.wakeDuration * MINUTE
+  const okayAt = atTime(morning, settings.schedule[morning.getDay()].okayTime)
+  const wakeAt = okayAt - settings.wakeDuration * MINUTE
   return {
     windStart: bedtime - settings.windDownMinutes * MINUTE,
     bedtime,
@@ -154,22 +165,23 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
     case 'on': {
       // Night until the next wake whose window hasn't already ended (so starting
       // mid-window shows "almost time", not a whole extra night). The ramp keeps
-      // its real start, so starting mid-window picks it up where it is.
+      // its real start, so starting mid-window picks it up where it is. Green
+      // hands over to tonight's story time, as the schedule's own green does.
       const wakeAt = firstWake(override.start, settings, wake => wake + durationMs > override.start)
       const okayAt = wakeAt + durationMs
       return [
         { state: 'night', start: override.start, end: Math.max(override.start, wakeAt) },
         { state: 'wake', start: wakeAt, end: okayAt },
-        { state: 'awake', start: okayAt, end: okayAt + holdMs }
+        { state: 'awake', start: okayAt, end: Math.min(okayAt + holdMs, nextWindStart(okayAt, settings)) }
       ]
     }
     case 'nap': {
       const end = override.start + override.minutes * MINUTE
       const baseSegmentAtEnd = resolveBase(end, settings).segment
       const baseAtEnd = baseSegmentAtEnd?.state
-      // A nap that runs into the evening routine — or whose 15-minute green
-      // tail would — never shows green: stay dark until it ends and hand
-      // straight back to the schedule.
+      // A nap that runs into the evening routine — or that ends in daytime
+      // idle with story time less than 15 minutes away — never shows green:
+      // stay dark until it ends and hand straight back to the schedule.
       if (
         baseAtEnd === 'bedtime'
         || baseAtEnd === 'night'
@@ -180,9 +192,14 @@ const overrideSegments = (override: Override, settings: Settings): Segment[] => 
       const rampStart = Math.max(override.start, end - Math.min(settings.wakeDuration, 5) * MINUTE)
       // Ending inside the morning's wake window: stay green until the schedule
       // turns green too, so the light never goes back from green to amber.
-      const greenEnd = baseAtEnd === 'wake' && baseSegmentAtEnd
-        ? Math.max(end + NAP_AWAKE_MS, baseSegmentAtEnd.end)
-        : end + NAP_AWAKE_MS
+      // Ending inside a long green hold: green hands over to tonight's story
+      // time, as the schedule's own green and Start now's do.
+      const greenEnd = Math.min(
+        baseAtEnd === 'wake' && baseSegmentAtEnd
+          ? Math.max(end + NAP_AWAKE_MS, baseSegmentAtEnd.end)
+          : end + NAP_AWAKE_MS,
+        nextWindStart(end, settings)
+      )
       return [
         { state: 'night', start: override.start, end: rampStart },
         { state: 'wake', start: rampStart, end },
@@ -295,8 +312,9 @@ export const phaseDisplay = (phase: ResolvedPhase, settings: Settings, now: Date
 
 // The next `count` "okay to get up" instants after `now`, honoring the
 // override: each candidate (scheduled or override-driven) is kept only if the
-// resolved phase at that instant really is "okay to get up". Feeds the native
-// alarms.
+// light really *turns* green then: "okay to get up" at that instant and not
+// just before it (a nap ending inside the wake window is already green when the
+// schedule's okay time arrives). Feeds the native alarms.
 export const upcomingOkayToWake = (
   now: Date,
   settings: Settings,
@@ -313,20 +331,26 @@ export const upcomingOkayToWake = (
   }
 
   if (isOverrideActive(override, at, settings)) {
-    const okay = overrideSegments(override, settings).find(segment => segment.state === 'awake')
+    const segments = overrideSegments(override, settings)
+    const okay = segments.find(segment => segment.state === 'awake')
     if (okay) {
       candidates.add(okay.start)
     }
+    // If handing back to the schedule ever turns the light green, that is a new
+    // green too. (No override does that today; the filter below drops it if not.)
+    candidates.add(endOfSegments(override, segments))
   }
 
   // An override that is active now only affects instants before its end; past
   // that, resolvePhase at a future instant must ignore it.
   const effectiveOverride = isOverrideActive(override, at, settings) ? override : null
 
+  const isGreen = (instant: number) => resolvePhase(new Date(instant), settings, effectiveOverride).state === 'awake'
+
   return [...candidates]
     .filter(instant => instant > at)
     .sort((a, b) => a - b)
-    .filter(instant => resolvePhase(new Date(instant), settings, effectiveOverride).state === 'awake')
+    .filter(instant => isGreen(instant) && !isGreen(instant - 1))
     .slice(0, count)
     .map(instant => new Date(instant))
 }

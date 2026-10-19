@@ -10,7 +10,7 @@ import {
   isValidColor,
   isValidDaySchedule,
   isValidDuration,
-  isValidMorningWake,
+  isValidOkayTime,
   isValidNapMinutes,
   isValidSleepTimer,
   isValidWindDown,
@@ -60,15 +60,15 @@ const loadSettings = (): void => {
 
 watch(settingsState, scheduleSave, { deep: true })
 
-// Edit one day's wake time or bedtime. Out-of-range values are ignored so the
+// Edit one day's okay-to-get-up time or bedtime. Out-of-range values are ignored so the
 // routine engine's "every night crosses midnight once" invariant always holds.
 const updateDaySchedule = (day: number, patch: Partial<DaySchedule>): void => {
   const entry = settingsState.value.schedule[day]
   if (!entry) {
     return
   }
-  if (patch.wakeTime !== undefined && isValidMorningWake(patch.wakeTime)) {
-    entry.wakeTime = normalizeWakeTime(patch.wakeTime)
+  if (patch.okayTime !== undefined && isValidOkayTime(patch.okayTime)) {
+    entry.okayTime = normalizeWakeTime(patch.okayTime)
   }
   if (patch.bedtime !== undefined && isValidBedtime(patch.bedtime)) {
     entry.bedtime = normalizeWakeTime(patch.bedtime)
@@ -81,7 +81,7 @@ const updateSchedule = (schedule: readonly DaySchedule[]): void => {
     return
   }
   settingsState.value.schedule = schedule.map(day => ({
-    wakeTime: normalizeWakeTime(day.wakeTime),
+    okayTime: normalizeWakeTime(day.okayTime),
     bedtime: normalizeWakeTime(day.bedtime)
   }))
 }
@@ -196,7 +196,7 @@ const settingsApi = {
   resetSettings,
   exportSettings,
   importSettings,
-  isValidMorningWake,
+  isValidOkayTime,
   isValidBedtime,
   isValidDuration,
   isValidBrightness,

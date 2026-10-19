@@ -62,7 +62,8 @@ onMounted(() => titleRef.value?.focus())
       </ul>
 
       <ul class="text-xs text-gray-400 mb-4 leading-relaxed space-y-2 list-disc pl-4">
-        <li>Set bedtimes and wake-up times for each day, sounds and colors with the gear icon.</li>
+        <li>With the gear icon, set each day’s bedtime and the time it’s okay to get up (the light
+          turns green then, after a short sunrise), plus sounds and colors.</li>
         <li>
           <span class="text-gray-300">Child lock:</span> the kid screen has no buttons. Hold the clock
           for 3 seconds to open the parent controls; they hide again on their own.
